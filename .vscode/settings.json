@@ -1,0 +1,14 @@
+{
+  "html.validate.scripts": false,
+  "javascript.validate.enable": false,
+  "files.associations": {
+    "internal/pages/challenge.html": "html"
+  },
+  "[html]": {
+    "editor.suggest.insertMode": "replace"
+  },
+  "css.lint.unknownAtRules": "ignore",
+  "scss.lint.unknownAtRules": "ignore",
+  "less.lint.unknownAtRules": "ignore",
+  "typescript.autoClosingTags": false
+}

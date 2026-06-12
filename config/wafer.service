@@ -1,0 +1,35 @@
+[Unit]
+Description=Wafer WAF Backend Service
+After=network.target postgresql.service clickhouse-server.service
+Wants=postgresql.service clickhouse-server.service
+
+[Service]
+Type=simple
+User=wafer
+Group=wafer
+WorkingDirectory=/opt/wafer
+ExecStart=/opt/wafer/wafer
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/wafer/.env
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# acme.sh writes account state, renewal config, and per-domain cert storage
+# under /opt/wafer/.acme.sh, so it must be writable under ProtectSystem=strict.
+ReadWritePaths=/opt/wafer/logs /opt/wafer/data /opt/wafer/.acme.sh /opt/certs
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

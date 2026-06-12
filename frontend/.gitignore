@@ -1,0 +1,33 @@
+# Environment — real config, never commit
+.env
+.env.local
+.env.*.local
+
+# Allow examples
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Package manager locks (keep one, ignore the other if you only use bun or npm)
+# Uncomment whichever you don't use:
+# bun.lock
+# package-lock.json
+
+# Cache
+.cache/
+.vite/
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp
+*~

@@ -1,0 +1,534 @@
+#RATELIMIT
+basic Access Limit
+Raw request flood per IP (all requests counted)
+
+WINDOW
+30s
+THRESHOLD
+50 Reqs
+PENALTY
+300s
+
+
+attack Access Limit
+WAF violation repeat offender detection per IP
+
+WINDOW
+60s
+THRESHOLD
+40 Reqs
+PENALTY
+300s
+
+error Access Limit
+Upstream error (4xx/5xx) repeat detection per IP
+
+WINDOW
+60s
+THRESHOLD
+15 Reqs
+PENALTY
+300s
+
+
+#BOT DETECTOR
+Header Detection Scores
+Adjust
+Missing User-Agent
++10
+Short User-Agent
++8
+Missing Accept
++8
+Generic Accept (*/*)
++8
+Missing Accept-Language
++8
+Headless Browser
++25
+Missing Sec-Fetch
++15
+Missing Accept-Encoding
++8
+Incomplete Sec-Fetch
++8
+No Browser Indicators
++8
+Chromium Missing Sec-CH-UA
++15
+Chromium Missing Sec-Fetch
++15
+Firefox Has Sec-CH-UA
++8
+Wildcard Accept + Browser UA
++5
+No Gzip or Brotli
++3
+Geo-Lang Mismatch
++8
+Repeat No Cookie
++10
+Burst Rate
++8
+Regular Interval
++6
+Unknown Browser/Bot
++27
+
+Verified Bot IP Ranges
+3
+Add Provider
+Bingbot
+JSON URL
+Active
+https://www.bing.com/toolbox/bingbot.json
+
+28 ranges
+Synced: 6/11/2026
+Official Microsoft Bing crawler IP ranges
+
+
+
+Verified Bot IP Ranges
+Googlebot
+JSON URL
+Active
+https://developers.google.com/static/search/apis/ipranges/googlebot.json
+
+315 ranges
+Synced: 6/11/2026
+Official Googlebot IP ranges
+
+
+Custom Detection Patterns
+GOODBOT
+Pattern UA	Type	Score	Verify IP	Status	Actions
+	
+googlebot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+gsa-crawler
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+msnbot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+msnbot-media
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+slurp
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+yahoo
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Googlebot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+AdsBot-Google
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Applebot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+DoCoMo
+good bot	0	DNS VERIFY	
+Active
+
+	
+Feedfetcher-Google
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Google-HTTP-Java-Client
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Googlebot-Image
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Googlebot-Mobile
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Googlebot-News
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Googlebot-Video
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Googlebot/Test
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Gravityscan
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Jakarta Commons
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Kraken/0.1
+good bot	0	DNS VERIFY	
+Active
+
+
+LinkedInBot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Mediapartners-Google
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+SAMSUNG
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Slackbot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Slackbot-LinkExpanding
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+TwitterBot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+Wordpress
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+adidxbot
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+bing
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+bingbot
+good bot	0	DNS VERIFY	
+Active
+
+
+bingpreview
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+developers.facebook.com
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+duckduckgo
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+facebookexternalhit
+good bot	0	DNS VERIFY	
+Active
+
+
+	
+facebookplatform
+good bot	0	DNS VERIFY	
+Active
+
+
+#IPREPUTATION
+MaxMind Scoring
+Auto-detect datacenter and cloud provider IPs. Manual entries override.
+
+Datacenter IP Score
+15
+Cloud Provider ASN Score
+15
+Save
+Spamhaus DROP Lists
+Sync
+Sync bad IPs/ASNs from Spamhaus DROP, DROPv6, and ASN-DROP.
+
+Bad IP/CIDR Score
+50
+Bad ASN Score
+50
+
+
+#Anomaly Behavior
+Header Inconsistency
+7 rules
+Save
+HTTP/2 Connection Header
++8
+8
+HTTP/2 request contains Connection header (protocol violation)
+
+Content-Type on GET/HEAD
++5
+5
+Content-Type header present on request with no body
+
+Accept vs Path Mismatch
++5
+5
+Accept: text/html but path is API or data endpoint
+
+Sec-Fetch-Dest Mismatch
++6
+6
+Sec-Fetch-Dest: document but path is asset or API
+
+Upgrade on Non-Navigate
++4
+4
+Upgrade-Insecure-Requests present but not a navigation request
+
+TE + CL Conflict
++10
+10
+Both Transfer-Encoding and Content-Length present (smuggling indicator)
+
+Multiple Host Headers
++10
+10
+Multiple Host headers detected (smuggling/spoofing)
+
+
+Cookie Anomaly
+3 rules
+Malformed Challenge Cookie
++8
+8
+Challenge cookie present but format is invalid
+
+Future Cookie Timestamp
++8
+8
+Challenge cookie timestamp is in the future
+
+Excessive Cookies (No Referer)
++5
+5
+More than 10 cookies on root path with no referer
+
+JA4 TLS Fingerprint
+5 rules
+Old TLS + Browser UA
++15
+15
+UA claims modern browser but TLS version is 1.0/1.1 (browsers dropped these)
+
+Browser UA + HTTP/1.0
++15
+15
+UA claims modern browser but using HTTP/1.0 protocol
+
+Browser UA + JA4 Empty
++4
+4
+HTTPS request with browser UA but no JA4 fingerprint (unusual)
+
+Bot UA + Browser JA4
++15
+15
+UA claims bot but JA4 shows browser-like TLS stack (high cipher count)
+
+Browser UA + Simple JA4
++15
+15
+UA claims browser but JA4 shows simple TLS client (low cipher count)
+
+
+#Scoring
+
+Decision Thresholds
+Block
+403 Forbidden
+70
+/ 100
+Challenge
+Browser Integrity Check
+35
+/ 100
+
+
+Category Weights
+Max possible: 140
+
+IP Reputation
+
+Datacenter ASN, cloud provider, proxy/VPN detection
+
+Max Score
+30
+Multiplier
+1
+
+Bot Detection
+
+Header analysis, UA patterns, behavioral signals
+
+Max Score
+35
+Multiplier
+1
+
+WAF Anomaly
+
+OWASP CRS anomaly scoring from Coraza engine
+
+Max Score
+40
+Multiplier
+1,5
+
+Protocol Anomaly
+
+JA3 mismatch, header inconsistency, cookie anomaly
+
+Max Score
+35
+Multiplier
+1
+
+
+
+Trust Reduction
+Verified Cookie
+Passed challenge verification
+
+-2
+REDUCE
+Trusted History
+Known good behavior over time
+
+-4
+REDUCE
+Stable Session
+Consistent session fingerprint
+
+-2
+REDUCE
+Good Bot
+Verified crawler (Googlebot, Bingbot)
+
+-5
+REDUCE
+Pipeline Flow
+
+
+#CHallenged Page
+Expiry (sec)
+3700
+Verified session
+
+Timeout (sec)
+30
+Challenge expires
+
+Max Attempts
+3
+Retries before refresh
+
+
+
+Trust Levels
+BEHAVIOR
+After solving, behavior analysis determines trust level. Higher levels get more score reduction.
+
+Level 0
+Solved but suspicious
+0
+Level 1
+Basic verification
+-5
+Level 2
+Natural interaction
+-10
+Level 3
+High confidence human
+-15
+Confidence Boundaries
+L0 → L1
+0,4
+L1 → L2
+0,6
+L2 → L3
+0,8
+
+

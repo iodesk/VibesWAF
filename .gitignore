@@ -1,0 +1,61 @@
+# Environment — real config, never commit
+.env
+.env.local
+.env.*.local
+
+# Allow examples
+!.env.example
+
+# Go build output
+/wafer
+/wafer.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency vendor
+# vendor/
+
+# Node (if any tooling at root level)
+node_modules/
+
+# Certs & keys
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+data/cert-cache/
+
+# Logs
+logs/
+*.log
+
+# Archives / backups
+*.zip
+*.tar.gz
+*.bak
+*.BAK
+
+# MaxMind GeoIP databases
+*.mmdb
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~

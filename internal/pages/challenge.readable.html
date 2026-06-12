@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{.Title}}</title>
+<style>
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+/* Layout */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #0a0a0a;
+  color: #e5e5e5;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+/* Header */
+header {
+  padding: 24px 48px;
+  border-bottom: 1px solid #1f1f1f;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  background: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-mark svg {
+  width: 16px;
+  height: 16px;
+  stroke: #fff;
+  stroke-width: 2.5;
+  fill: none;
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #1a2a1a;
+  background: #050f05;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ca8a04;
+}
+
+.status-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: #ca8a04;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Main Content */
+main {
+  display: flex;
+  align-items: center;
+  padding: 0 48px;
+}
+
+.content {
+  max-width: 560px;
+  width: 100%;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  color: #525252;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+/* Spinner */
+.spinner-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.ring {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #1f1f1f;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.ring.done {
+  border-color: #16a34a;
+  border-top-color: #16a34a;
+  animation: none;
+}
+
+.ring.fail {
+  border-color: #dc2626;
+  border-top-color: #dc2626;
+  animation: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.check-icon {
+  display: none;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.check-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: #16a34a;
+  stroke-width: 2.5;
+  fill: none;
+}
+
+.fail-icon {
+  display: none;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.fail-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: #dc2626;
+  stroke-width: 2.5;
+  fill: none;
+}
+
+.spinner-label {
+  font-size: 13px;
+  color: #737373;
+}
+
+/* Title & Description */
+h1 {
+  font-size: 38px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin-bottom: 12px;
+  transition: color 0.3s;
+}
+
+h1.success {
+  color: #16a34a;
+}
+
+h1.failed {
+  color: #dc2626;
+}
+
+.desc {
+  font-size: 14px;
+  color: #525252;
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+
+/* Progress Bar */
+.progress-track {
+  width: 100%;
+  height: 1px;
+  background: #1f1f1f;
+  margin-bottom: 40px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #2563eb;
+  transition: width linear;
+}
+
+.progress-bar.success {
+  background: #16a34a;
+}
+
+/* Metadata */
+.meta-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+.meta-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #404040;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meta-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: #737373;
+  font-family: 'SF Mono', 'Fira Code', 'Roboto Mono', monospace;
+}
+
+/* Footer */
+footer {
+  padding: 20px 48px;
+  border-top: 1px solid #1f1f1f;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer-left {
+  font-size: 12px;
+  color: #404040;
+}
+
+.footer-right {
+  font-size: 12px;
+  color: #404040;
+}
+
+.footer-right span {
+  color: #737373;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  header, main, footer {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  
+  h1 {
+    font-size: 26px;
+  }
+  
+  .meta-row {
+    flex-direction: column;
+    gap: 20px;
+  }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <span class="brand-name">Vibes WAF</span>
+  </div>
+  <div class="status-pill">
+    <div class="status-dot"></div>
+    <span class="status-text">Verifying</span>
+  </div>
+</header>
+
+<main>
+  <div class="content">
+    <div class="eyebrow">Security Check</div>
+    
+    <div class="spinner-wrap">
+      <div class="ring" id="ring"></div>
+      <div class="check-icon" id="check-icon">
+        <svg viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <div class="fail-icon" id="fail-icon">
+        <svg viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </div>
+      <span class="spinner-label" id="spinner-label">Checking your browser...</span>
+    </div>
+    
+    <h1 id="title">{{.Title}}</h1>
+    <p class="desc" id="desc">{{.Description}}</p>
+    
+    <div class="progress-track">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    
+    <div class="meta-row">
+      <div class="meta-block">
+        <span class="meta-label">Host</span>
+        <span class="meta-value" id="meta-host">—</span>
+      </div>
+      <div class="meta-block">
+        <span class="meta-label">Ray ID</span>
+        <span class="meta-value" id="meta-ray">{{if .ShowRayID}}{{.RayID}}{{else}}—{{end}}</span>
+      </div>
+      <div class="meta-block">
+        <span class="meta-label">Status</span>
+        <span class="meta-value" id="meta-status">Pending</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span class="footer-left"></span>
+  <span class="footer-right">Protected by <span>Vibes WAF</span></span>
+</footer>
+
+<script>
+/**
+ * Browser Integrity Check - Challenge Page
+ * 
+ * This script performs client-side verification before allowing access:
+ * 1. Browser Feature Detection - Checks for modern browser capabilities
+ * 2. Proof of Work - Simple computational challenge
+ * 3. Server Verification - Validates with backend
+ * 
+ * Flow:
+ * - Display loading animation
+ * - Wait for configured scan time
+ * - Run browser checks
+ * - Execute proof of work
+ * - Call /__waf_verify endpoint
+ * - Set verification cookie
+ * - Reload page to access content
+ */
+
+(function() {
+  'use strict';
+  
+  // Configuration from Go template
+  var scanMs = {{.ScanMs}};   // Time to wait before verification (ms)
+  var redirMs = {{.RedirMs}}; // Time to wait before redirect (ms)
+  
+  // Set hostname in metadata
+  document.getElementById('meta-host').textContent = window.location.hostname;
+  
+  // Progress bar animation
+  var bar = document.getElementById('progress-bar');
+  var startTime = Date.now();
+  
+  requestAnimationFrame(function tick() {
+    var elapsed = Date.now() - startTime;
+    var percent = Math.min((elapsed / scanMs) * 100, 100);
+    bar.style.width = percent + '%';
+    
+    if (percent < 100) {
+      requestAnimationFrame(tick);
+    }
+  });
+  
+  /**
+   * Browser Feature Detection
+   * Checks if browser has required modern features
+   * 
+   * @returns {boolean} true if browser passes checks
+   */
+  function browserCheck() {
+    var checks = 0;
+    
+    // Storage APIs
+    if (typeof window.localStorage !== 'undefined') checks++;
+    if (typeof window.sessionStorage !== 'undefined') checks++;
+    if (typeof window.indexedDB !== 'undefined') checks++;
+    
+    // Browser capabilities
+    if (navigator.cookieEnabled) checks++;
+    if (window.requestAnimationFrame) checks++;
+    if (window.Promise) checks++;
+    if (window.fetch) checks++;
+    
+    // Canvas support (for fingerprinting)
+    if (document.createElement('canvas').getContext) checks++;
+    
+    // Require at least 6 out of 8 checks to pass
+    return checks >= 6;
+  }
+  
+  /**
+   * Simple Proof of Work
+   * Performs computational work to prove JavaScript execution
+   * 
+   * @returns {boolean} true if computation completes
+   */
+  function simplePoW() {
+    var target = 1000000; // 1 million iterations
+    var result = 0;
+    
+    for (var i = 0; i < target; i++) {
+      result += Math.sqrt(i);
+    }
+    
+    return result > 0;
+  }
+  
+  /**
+   * Display failure state
+   */
+  function showFailure(message) {
+    document.getElementById('ring').className = 'ring fail';
+    document.getElementById('ring').style.display = 'none';
+    document.getElementById('fail-icon').style.display = 'block';
+    document.getElementById('spinner-label').textContent = 'Verification failed';
+    document.getElementById('meta-status').textContent = 'Failed';
+    
+    var title = document.getElementById('title');
+    title.textContent = 'Verification Failed';
+    title.className = 'failed';
+    
+    document.getElementById('desc').textContent = message;
+  }
+  
+  /**
+   * Display success state and redirect
+   */
+  function showSuccess() {
+    bar.style.width = '100%';
+    bar.classList.add('success');
+    
+    document.getElementById('ring').style.display = 'none';
+    document.getElementById('check-icon').style.display = 'block';
+    document.getElementById('spinner-label').textContent = 'Verification complete';
+    document.getElementById('meta-status').textContent = 'Verified';
+    
+    var title = document.getElementById('title');
+    title.textContent = 'Verification Complete';
+    title.className = 'success';
+    
+    document.getElementById('desc').textContent = 'Your browser has been verified. Redirecting...';
+    
+    // Reload page after redirect delay
+    setTimeout(function() {
+      window.location.reload(true);
+    }, redirMs);
+  }
+  
+  /**
+   * Main verification flow
+   */
+  setTimeout(function() {
+    // Step 1: Browser feature check
+    if (!browserCheck()) {
+      showFailure('Your browser does not meet security requirements.');
+      return;
+    }
+    
+    // Step 2: Proof of work
+    if (!simplePoW()) {
+      return;
+    }
+    
+    // Step 3: Server verification
+    fetch('/__waf_verify', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(function(response) {
+      if (!response.ok) {
+        throw new Error('Verification denied');
+      }
+      return response.json();
+    })
+    .then(function(data) {
+      // Verification successful
+      showSuccess();
+    })
+    .catch(function(error) {
+      // Verification failed
+      showFailure('Unable to verify your browser. Access has been denied.');
+    });
+    
+  }, scanMs);
+  
+})();
+</script>
+</body>
+</html>

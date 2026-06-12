@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Security Check — {{.Host}}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0a0a0a;color:#e5e5e5;min-height:100vh;display:grid;grid-template-rows:auto 1fr auto}
+header{padding:24px 48px;border-bottom:1px solid #1f1f1f;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:28px;height:28px;background:#2563eb;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-mark svg{width:16px;height:16px;stroke:#fff;stroke-width:2.5;fill:none}
+.brand-name{font-size:13px;font-weight:600;color:#fff;letter-spacing:0.02em}
+.status-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid #1a1a2e;background:#0a0a1a}
+.status-pill-dot{width:6px;height:6px;background:#ca8a04;border-radius:50%;animation:pulse 2s infinite}
+.status-pill-text{font-size:11px;font-weight:500;color:#ca8a04;letter-spacing:0.06em;text-transform:uppercase}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+main{display:flex;align-items:center;padding:0 48px}
+.content{max-width:560px;width:100%}
+.eyebrow{font-size:11px;font-weight:600;color:#525252;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:20px}
+h1{font-size:38px;font-weight:700;color:#fff;line-height:1.1;letter-spacing:-0.03em;margin-bottom:12px}
+.desc{font-size:14px;color:#737373;line-height:1.6;margin-bottom:20px;max-width:440px}
+.slider-box{padding:14px 16px;border:1px solid #1f1f1f;background:#111;margin-bottom:20px;border-radius:6px;}
+.slider-label{font-size:10px;font-weight:600;color:#525252;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px}
+.track{width:100%;height:38px;border-radius:5px;background:#0a0a0a;border:1px solid #2a2a2a;position:relative;overflow:hidden;cursor:pointer}
+.target-zone{position:absolute;top:0;height:100%;width:8%;background:rgba(37,99,235,0.08);border-left:2px solid rgba(37,99,235,0.3);border-right:2px solid rgba(37,99,235,0.3);opacity:0;transition:opacity 0.3s}
+.handle{position:absolute;top:0;left:0;border-radius:4px;width:36px;height:36px;background:#2563eb;cursor:grab;display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none;transition:background 0.15s}
+.handle:active{cursor:grabbing;background:#1d4ed8}
+.handle svg{width:14px;height:14px;stroke:#fff;stroke-width:2.5;fill:none}
+.handle.success{background:#16a34a}
+.handle.fail{background:#dc2626}
+.status-msg{margin-top:10px;font-size:11px;font-weight:500;min-height:16px;color:#525252}
+.status-msg.error{color:#f87171}
+.status-msg.success{color:#4ade80}
+.divider{width:100%;height:1px;background:#1f1f1f;margin-bottom:20px}
+.meta-row{display:flex;align-items:flex-start;gap:40px}
+.meta-block{display:flex;flex-direction:column;gap:4px}
+.meta-label{font-size:10px;font-weight:600;color:#404040;letter-spacing:0.08em;text-transform:uppercase}
+.meta-value{font-size:13px;font-weight:500;color:#737373;font-family:'SF Mono','Fira Code','Roboto Mono',monospace}
+footer{padding:20px 48px;border-top:1px solid #1f1f1f;display:flex;align-items:center;justify-content:space-between}
+.footer-left{font-size:12px;color:#404040}
+.footer-right{font-size:12px;color:#404040}
+.footer-right span{color:#737373}
+@media(max-width:640px){header,main,footer{padding-left:24px;padding-right:24px}h1{font-size:26px}.meta-row{flex-direction:column;gap:20px}}
+</style>
+</head>
+<body>
+<header>
+<div class="brand">
+<div class="brand-mark">
+<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+</div>
+<span class="brand-name">Vibes WAF</span>
+</div>
+<div class="status-pill">
+<div class="status-pill-dot"></div>
+<span class="status-pill-text">Verifying</span>
+</div>
+</header>
+<main>
+<div class="content">
+<div class="eyebrow">Security Check</div>
+<h1>Verify you are human</h1>
+<p class="desc">Slide the handle to the highlighted zone to prove you are not bot.</p>
+<div class="slider-box">
+<div class="slider-label">Drag to the target zone</div>
+<div class="track" id="track">
+<div class="target-zone"></div>
+<div class="handle" id="handle">
+<svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+</div>
+</div>
+<div class="status-msg" id="status">Waiting for interaction...</div>
+</div>
+<div class="divider"></div>
+<div class="meta-row">
+<div class="meta-block">
+<span class="meta-label">Host</span>
+<span class="meta-value">{{.Host}}</span>
+</div>
+<div class="meta-block">
+<span class="meta-label"></span>
+<span class="meta-value"></span>
+</div>
+<div class="meta-block">
+<span class="meta-label">Status</span>
+<span class="meta-value" id="meta-status">Pending</span>
+</div>
+</div>
+</div>
+</main>
+<footer>
+<span class="footer-left"></span>
+<span class="footer-right">Protected by <span>Vibes WAF</span></span>
+</footer>
+<script>
+(function() {
+  var challengeID = "{{.ChallengeID}}";
+  var _k = {{.ObfKey}};
+  var _t = {{.ObfTarget}};
+  var target = _t ^ _k;
+  var maxAttempts = {{.MaxAttempts}};
+  var timeout = {{.Timeout}};
+  var startTime = Date.now();
+  var solved = false;
+
+  var track = document.getElementById('track');
+  var handle = document.getElementById('handle');
+  var targetZone = track.querySelector('.target-zone');
+  var status = document.getElementById('status');
+  var metaStatus = document.getElementById('meta-status');
+
+  var trackWidth = track.offsetWidth;
+  var handleWidth = handle.offsetWidth;
+  var maxX = trackWidth - handleWidth;
+  var currentX = 0;
+  var dragging = false;
+
+  // Trajectory + Signals collection
+  var trajectory = [];
+  var dragStartTime = 0;
+  var signals = {
+    focus_count: 0,
+    blur_count: 0,
+    scroll_count: 0,
+    mousemove_before_drag: 0,
+    first_interaction_ms: 0
+  };
+  var firstInteractionRecorded = false;
+  var mousemovesBeforeDrag = 0;
+
+  window.addEventListener('focus', function() { signals.focus_count++; });
+  window.addEventListener('blur', function() { signals.blur_count++; });
+  window.addEventListener('scroll', function() { signals.scroll_count++; });
+  document.addEventListener('mousemove', function() {
+    if (!dragging && !solved) {
+      mousemovesBeforeDrag++;
+      if (!firstInteractionRecorded) {
+        signals.first_interaction_ms = Date.now() - startTime;
+        firstInteractionRecorded = true;
+      }
+    }
+  });
+
+  // Position target zone using requestAnimationFrame to avoid immediate DOM readability
+  var _pos = ((_t ^ _k) - 4) | 0;
+  requestAnimationFrame(function() {
+    targetZone.style.cssText = 'position:absolute;top:0;height:100%;width:8%;background:rgba(37,99,235,0.08);border-left:2px solid rgba(37,99,235,0.3);border-right:2px solid rgba(37,99,235,0.3);left:' + _pos + '%;opacity:1;transition:opacity 0.3s';
+  });
+
+  function setHandlePos(x) {
+    if (x < 0) x = 0;
+    if (x > maxX) x = maxX;
+    currentX = x;
+    handle.style.left = x + 'px';
+  }
+
+  function getPercent() {
+    return Math.round((currentX / maxX) * 100);
+  }
+
+  function showStatus(msg, type) {
+    status.textContent = msg;
+    status.className = 'status-msg ' + type;
+  }
+
+  function recordPoint(clientX, clientY) {
+    if (!dragging || solved) return;
+    var t = Date.now() - dragStartTime;
+    trajectory.push({x: Math.round(clientX), y: Math.round(clientY), t: t});
+  }
+
+  function submit() {
+    if (solved) return;
+    var answer = getPercent();
+    var duration = Date.now() - startTime;
+
+    signals.mousemove_before_drag = mousemovesBeforeDrag;
+
+    showStatus('Verifying...', '');
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/__waf_verify');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.withCredentials = true;
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        solved = true;
+        handle.className = 'handle success';
+        showStatus('Verified. Redirecting...', 'success');
+        metaStatus.textContent = 'Verified';
+        setTimeout(function() { window.location.reload(true); }, 800);
+      } else {
+        handle.className = 'handle fail';
+        try {
+          var resp = JSON.parse(xhr.responseText);
+          if (resp.error === 'expired') {
+            showStatus('Challenge expired. Refreshing...', 'error');
+            metaStatus.textContent = 'Expired';
+            setTimeout(function() { window.location.reload(true); }, 1500);
+          } else if (typeof resp.remaining !== 'number' || resp.remaining <= 0) {
+            showStatus('Too many attempts. Refreshing...', 'error');
+            metaStatus.textContent = 'Failed';
+            setTimeout(function() { window.location.reload(true); }, 1500);
+          } else {
+            showStatus('Incorrect. ' + resp.remaining + ' attempt(s) left.', 'error');
+            setTimeout(function() {
+              handle.className = 'handle';
+              setHandlePos(0);
+              trajectory = [];
+              dragStartTime = 0;
+              startTime = Date.now();
+            }, 600);
+          }
+        } catch(e) {
+          showStatus('Error. Refreshing...', 'error');
+          setTimeout(function() { window.location.reload(true); }, 1500);
+        }
+      }
+    };
+    xhr.onerror = function() {
+      showStatus('Network error. Please try again.', 'error');
+    };
+    xhr.send(JSON.stringify({
+      challenge_id: challengeID,
+      answer: answer,
+      duration: duration,
+      trajectory: trajectory,
+      signals: signals
+    }));
+  }
+
+  handle.addEventListener('mousedown', function(e) {
+    dragging = true;
+    dragStartTime = Date.now();
+    trajectory = [];
+    recordPoint(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging || solved) return;
+    var rect = track.getBoundingClientRect();
+    setHandlePos(e.clientX - rect.left - (handleWidth / 2));
+    recordPoint(e.clientX, e.clientY);
+  });
+  document.addEventListener('mouseup', function() { if (dragging && !solved) { dragging = false; submit(); } });
+
+  handle.addEventListener('touchstart', function(e) {
+    dragging = true;
+    dragStartTime = Date.now();
+    trajectory = [];
+    recordPoint(e.touches[0].clientX, e.touches[0].clientY);
+    e.preventDefault();
+  });
+  document.addEventListener('touchmove', function(e) {
+    if (!dragging || solved) return;
+    var rect = track.getBoundingClientRect();
+    setHandlePos(e.touches[0].clientX - rect.left - (handleWidth / 2));
+    recordPoint(e.touches[0].clientX, e.touches[0].clientY);
+  });
+  document.addEventListener('touchend', function() { if (dragging && !solved) { dragging = false; submit(); } });
+
+  window.addEventListener('resize', function() { trackWidth = track.offsetWidth; maxX = trackWidth - handleWidth; });
+
+  setTimeout(function() {
+    if (!solved) {
+      showStatus('Challenge expired. Please refresh the page.', 'error');
+      metaStatus.textContent = 'Expired';
+      handle.style.pointerEvents = 'none';
+      handle.style.opacity = '0.4';
+    }
+  }, timeout * 1000);
+})();
+</script>
+</body>
+</html>

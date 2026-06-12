@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Access Denied — {{.Host}}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0a0a0a;color:#e5e5e5;min-height:100vh;display:grid;grid-template-rows:auto 1fr auto}
+a{color:inherit;text-decoration:none}
+header{padding:24px 48px;border-bottom:1px solid #1f1f1f;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:28px;height:28px;background:#dc2626;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-mark svg{width:16px;height:16px;stroke:#fff;stroke-width:2.5;fill:none}
+.brand-name{font-size:13px;font-weight:600;color:#fff;letter-spacing:0.02em}
+.status-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid #2a1515;background:#1a0a0a}
+.status-pill-dot{width:6px;height:6px;background:#dc2626;border-radius:50%}
+.status-pill-text{font-size:11px;font-weight:500;color:#dc2626;letter-spacing:0.06em;text-transform:uppercase}
+main{display:flex;align-items:center;padding:0 48px}
+.content{max-width:640px;width:100%}
+.error-code{font-size:11px;font-weight:600;color:#525252;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:20px}
+h1{font-size:42px;font-weight:700;color:#fff;line-height:1.1;letter-spacing:-0.03em;margin-bottom:16px}
+.desc{font-size:15px;color:#737373;line-height:1.6;margin-bottom:40px;max-width:480px}
+.divider{width:100%;height:1px;background:#1f1f1f;margin-bottom:40px}
+.meta-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0;border:1px solid #1f1f1f}
+.meta-item{padding:16px 20px;border-right:1px solid #1f1f1f;border-bottom:1px solid #1f1f1f}
+.meta-item:nth-child(2n){border-right:none}
+.meta-item:nth-last-child(-n+2){border-bottom:none}
+.meta-label{font-size:10px;font-weight:600;color:#525252;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px}
+.meta-value{font-size:13px;font-weight:500;color:#a3a3a3;font-family:'SF Mono','Fira Code','Fira Mono','Roboto Mono',monospace;word-break:break-all}
+.reason-row{margin-bottom:32px;padding:16px 20px;border-left:2px solid #dc2626;background:#0f0a0a}
+.reason-label{font-size:10px;font-weight:600;color:#dc2626;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px}
+.reason-text{font-size:13px;color:#a3a3a3;line-height:1.5}
+footer{padding:20px 48px;border-top:1px solid #1f1f1f;display:flex;align-items:center;justify-content:space-between}
+.footer-left{font-size:12px;color:#404040}
+.footer-right{font-size:12px;color:#404040}
+.footer-right span{color:#737373}
+@media(max-width:640px){header,main,footer{padding-left:24px;padding-right:24px}h1{font-size:28px}.meta-grid{grid-template-columns:1fr}.meta-item{border-right:none}.meta-item:nth-last-child(-n+2){border-bottom:1px solid #1f1f1f}.meta-item:last-child{border-bottom:none}}
+</style>
+</head>
+<body>
+<header>
+<div class="brand">
+<div class="brand-mark">
+<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+</div>
+<span class="brand-name">Vibes WAF</span>
+</div>
+<div class="status-pill">
+<div class="status-pill-dot"></div>
+<span class="status-pill-text">Blocked</span>
+</div>
+</header>
+<main>
+<div class="content">
+<div class="error-code">Error 403 &nbsp;·&nbsp; Access Denied</div>
+<h1>Request Blocked</h1>
+<p class="desc">This request was identified as a threat and blocked before reaching the origin server.</p>
+<div class="reason-row">
+<div class="reason-label">Block Reason</div>
+<div class="reason-text">{{.Reason}}</div>
+</div>
+<div class="divider"></div>
+<div class="meta-grid">
+<div class="meta-item">
+<div class="meta-label">IP Address</div>
+<div class="meta-value">{{.IP}}</div>
+</div>
+<div class="meta-item">
+<div class="meta-label">Timestamp</div>
+<div class="meta-value">{{.Timestamp}}</div>
+</div>
+<div class="meta-item">
+<div class="meta-label">Ray ID</div>
+<div class="meta-value">{{.RayID}}</div>
+</div>
+<div class="meta-item">
+<div class="meta-label">Host</div>
+<div class="meta-value">{{.Host}}</div>
+</div>
+</div>
+</div>
+</main>
+<footer>
+<span class="footer-left"></span>
+<span class="footer-right">Protected by <span>Vibes WAF</span></span>
+</footer>
+</body>
+</html>
