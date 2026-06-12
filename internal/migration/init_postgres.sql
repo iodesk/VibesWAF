@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS bot_patterns (
     enabled          BOOLEAN NOT NULL DEFAULT true,
     description      TEXT NOT NULL DEFAULT '',
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(pattern_type, pattern)
 );
 
 -- 5. Bot Whitelist
@@ -74,7 +75,7 @@ CREATE TABLE IF NOT EXISTS bot_whitelist (
 -- 6. Bot IP Ranges
 CREATE TABLE IF NOT EXISTS bot_ip_ranges (
     id               SERIAL PRIMARY KEY,
-    name             TEXT NOT NULL,
+    name             TEXT NOT NULL UNIQUE,
     source_type      TEXT NOT NULL DEFAULT 'manual',
     url              TEXT NOT NULL DEFAULT '',
     ip_ranges        JSONB NOT NULL DEFAULT '[]',
@@ -164,6 +165,10 @@ CREATE TABLE IF NOT EXISTS ip_reputation_entries (
 
 -- Migration: add category column if not exists
 ALTER TABLE ip_reputation_entries ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '';
+
+-- Migration: add unique constraints if not exists (fixes deploy-time bloat on re-run)
+ALTER TABLE bot_patterns ADD CONSTRAINT IF NOT EXISTS bot_patterns_type_pattern_unique UNIQUE (pattern_type, pattern);
+ALTER TABLE bot_ip_ranges ADD CONSTRAINT IF NOT EXISTS bot_ip_ranges_name_unique UNIQUE (name);
 
 -- ============================================================
 -- DEFAULT SETTINGS SEED
@@ -341,7 +346,7 @@ INSERT INTO bot_patterns (pattern_type, pattern, score, verify_ip, enabled, desc
   ('good_bot', 'duckduckgo', 0, true, true, 'DuckDuckGo crawler'),
   ('good_bot', 'facebookexternalhit', 0, true, true, 'Facebook link preview bot'),
   ('good_bot', 'facebookplatform', 0, true, true, 'Facebook platform bot')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (pattern_type, pattern) DO NOTHING;
 
 -- ============================================================
 -- DEFAULT BOT IP RANGES SEED
@@ -351,6 +356,6 @@ ON CONFLICT DO NOTHING;
 INSERT INTO bot_ip_ranges (name, source_type, url, ip_ranges, enabled, description) VALUES
   ('Bingbot', 'json_url', 'https://www.bing.com/toolbox/bingbot.json', '[]', true, 'Official Microsoft Bing crawler IP ranges'),
   ('Googlebot', 'json_url', 'https://developers.google.com/static/search/apis/ipranges/googlebot.json', '[]', true, 'Official Googlebot IP ranges')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
 COMMIT;
