@@ -144,7 +144,7 @@ func main() {
 	appCfg.LogStartup("WAF engine: PL=%d threshold=%d", wafCfg.ParanoiaLevel, wafCfg.AnomalyThreshold)
 
 	wafService := service.NewWAFService(appService, repos.Settings, clickhouseLogger, appCfg)
-	rateLimitService := service.NewRateLimitService(repos.Settings, appService)
+	rateLimitService := service.NewRateLimitService(repos.Settings)
 
 	rlCfg, rlCfgErr := repos.Settings.GetRateLimitConfig()
 	if rlCfgErr != nil {
@@ -260,7 +260,7 @@ func main() {
 		Phase3: pipeline.NewDecisionEngine(getScoringConfig),
 		Phase4: []pipeline.Handler{
 			pipeline.NewBlockHandler(),
-			handlers.NewChallengeHandler(challengeRegistry, challengeStore),
+			handlers.NewChallengeHandler(challengeRegistry, challengeStore, botDetectionService),
 		},
 		ScoringConfig:    &scoringCfg,
 		GetScoringConfig: getScoringConfig,

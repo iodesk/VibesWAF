@@ -29,14 +29,6 @@ type AppConfig struct {
 
 	ListenPort int `json:"listen_port,omitempty"`
 
-	UseGlobalRateLimit bool               `json:"use_global_rate_limit"`
-	RateLimits         []RateLimitProfile `json:"rate_limits,omitempty"`
-
-	UseGlobalWAF bool        `json:"use_global_waf"`
-	WAF          *WAFProfile `json:"waf,omitempty"`
-
-	UseGlobalBot bool        `json:"use_global_bot"`
-	Bot          *BotProfile `json:"bot,omitempty"`
 
 	RedirectHTTPS bool              `json:"redirect_https"`
 	HealthCheck   HealthCheckConfig `json:"health_check"`
@@ -100,126 +92,6 @@ type CacheConfig struct {
 	Enabled bool `json:"enabled"`
 	TTL     int  `json:"ttl"`
 }
-
-
-type RateLimitProfile struct {
-	Type         string `json:"type"`
-	Duration     int    `json:"duration"`
-	Count        int    `json:"count"`
-	Action       string `json:"action"`
-	ChallengeSec int    `json:"challenge_sec"`
-}
-
-
-type WAFProfile struct {
-	ScoreThreshold          int    `json:"score_threshold"`
-	OutboundScoreThreshold  int    `json:"outbound_score_threshold,omitempty"`
-}
-
-
-type BotProfile struct {
-	EnableChallenge bool   `json:"enable_challenge"`
-	ChallengeType   string `json:"challenge_type"`
-	ChallengeExpiry int    `json:"challenge_expiry"`
-	ChallengeWait   int    `json:"challenge_wait"`
-}
-
-
-type App struct {
-	ID          string
-	Domain      string
-	Description string
-
-	Config AppConfig
-
-	UnderAttackMode bool
-
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// rrCounters holds per-app atomic round-robin counters (keyed by app ID).
-var rrCounters sync.Map
-
-func (a *App) IsStream() bool {
-	if len(a.Config.Upstreams) == 0 {
-		return false
-	}
-	scheme := a.Config.Upstreams[0].Scheme
-	return scheme == "tcp" || scheme == "udp"
-}
-
-func (a *App) StreamScheme() string {
-	if len(a.Config.Upstreams) == 0 {
-		return ""
-	}
-	return a.Config.Upstreams[0].Scheme
-}
-
-func StreamPortMin() int {
-	if val := os.Getenv("STREAM_PORT_MIN"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 10000
-}
-
-func StreamPortMax() int {
-	if val := os.Getenv("STREAM_PORT_MAX"); val != "" {
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
-			return n
-		}
-	}
-	return 19999
-}
-
-func (a *App) PickUpstream(clientIP string) *Upstream {
-	active := make([]Upstream, 0, len(a.Config.Upstreams))
-	for _, u := range a.Config.Upstreams {
-		if !u.Enabled {
-			continue
-		}
-		// Skip unhealthy upstreams only when health check is configured.
-		if a.Config.HealthCheck.Enabled && !u.Healthy {
-			continue
-		}
-		active = append(active, u)
-	}
-	// Fallback: if all upstreams are unhealthy, use all enabled ones.
-	if len(active) == 0 {
-		for _, u := range a.Config.Upstreams {
-			if u.Enabled {
-				active = append(active, u)
-			}
-		}
-	}
-	if len(active) == 0 {
-		return nil
-	}
-	if len(active) == 1 {
-		return &active[0]
-	}
-
-	switch a.Config.LBMethod {
-	case "ip-hash":
-		h := fnv.New32a()
-		h.Write([]byte(clientIP))
-		idx := int(h.Sum32()) % len(active)
-		return &active[idx]
-
-	case "least-conn":
-		// Without real-time connection tracking, fall through to round-robin.
-		fallthrough
-
-	default: // round-robin
-		val, _ := rrCounters.LoadOrStore(a.ID, new(uint64))
-		counter := val.(*uint64)
-		idx := int(atomic.AddUint64(counter, 1)-1) % len(active)
-		return &active[idx]
-	}
-}
-
 
 
 // ExtractClientIP returns the real client IP by walking X-Forwarded-For
@@ -312,6 +184,62 @@ func ExtractClientIPStatic(r *http.Request, trustedProxies []string) string {
 	return strings.TrimSpace(ips[0])
 }
 
+
+func (a *App) PickUpstream(clientIP string) *Upstream {
+	active := make([]Upstream, 0, len(a.Config.Upstreams))
+	for _, u := range a.Config.Upstreams {
+		if !u.Enabled {
+			continue
+		}
+		// Skip unhealthy upstreams only when health check is configured.
+		if a.Config.HealthCheck.Enabled && !u.Healthy {
+			continue
+		}
+		active = append(active, u)
+	}
+	// Fallback: if all upstreams are unhealthy, use all enabled ones.
+	if len(active) == 0 {
+		for _, u := range a.Config.Upstreams {
+			if u.Enabled {
+				active = append(active, u)
+			}
+		}
+	}
+	if len(active) == 0 {
+		return nil
+	}
+	if len(active) == 1 {
+		return &active[0]
+	}
+
+	switch a.Config.LBMethod {
+	case "least-conn":
+		return a.pickLeastConn(active)
+	case "ip-hash":
+		return a.pickIPHash(active, clientIP)
+	default:
+		return a.pickRoundRobin(active)
+	}
+}
+
+func (a *App) pickRoundRobin(upstreams []Upstream) *Upstream {
+	val, _ := rrCounters.LoadOrStore(a.ID, new(uint64))
+	counter := val.(*uint64)
+	idx := atomic.AddUint64(counter, 1) % uint64(len(upstreams))
+	return &upstreams[idx]
+}
+
+func (a *App) pickLeastConn(upstreams []Upstream) *Upstream {
+	// TODO: track connection counts per upstream
+	return &upstreams[0]
+}
+
+func (a *App) pickIPHash(upstreams []Upstream, clientIP string) *Upstream {
+	h := fnv.New32a()
+	h.Write([]byte(clientIP))
+	idx := h.Sum32() % uint32(len(upstreams))
+	return &upstreams[idx]
+}
 func (a *App) Validate() error {
 	if a.Domain == "" {
 		return ErrInvalidDomain
@@ -365,29 +293,6 @@ func (a *App) Validate() error {
 		}
 	}
 
-	if !a.Config.UseGlobalRateLimit {
-		for _, rl := range a.Config.RateLimits {
-			if rl.Duration <= 0 || rl.Count <= 0 {
-				return ErrInvalidFloodConfig
-			}
-		}
-	}
-
-	if !a.Config.UseGlobalBot && a.Config.Bot != nil && a.Config.Bot.EnableChallenge {
-		if a.Config.Bot.ChallengeType != "js" && a.Config.Bot.ChallengeType != "cookie" && a.Config.Bot.ChallengeType != "pow" {
-			return ErrInvalidChallengeType
-		}
-		if a.Config.Bot.ChallengeExpiry <= 0 || a.Config.Bot.ChallengeWait <= 0 {
-			return ErrInvalidChallengeConfig
-		}
-	}
-
-	if !a.Config.UseGlobalWAF && a.Config.WAF != nil {
-		if a.Config.WAF.ScoreThreshold <= 0 {
-			return ErrInvalidWAFThreshold
-		}
-	}
-
 	adv := a.Config.Advanced
 	if adv.ConnectTimeout < 0 || adv.ConnectTimeout > 300 {
 		return fmt.Errorf("connect_timeout must be between 0 and 300")
@@ -422,4 +327,54 @@ func (a *App) Validate() error {
 	}
 
 	return nil
+}
+
+
+type App struct {
+	ID          string
+	Domain      string
+	Description string
+
+	Config AppConfig
+
+	UnderAttackMode bool
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// rrCounters holds per-app atomic round-robin counters (keyed by app ID).
+var rrCounters sync.Map
+
+func (a *App) IsStream() bool {
+	if len(a.Config.Upstreams) == 0 {
+		return false
+	}
+	scheme := a.Config.Upstreams[0].Scheme
+	return scheme == "tcp" || scheme == "udp"
+}
+
+func (a *App) StreamScheme() string {
+	if len(a.Config.Upstreams) == 0 {
+		return ""
+	}
+	return a.Config.Upstreams[0].Scheme
+}
+
+func StreamPortMin() int {
+	if val := os.Getenv("STREAM_PORT_MIN"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 10000
+}
+
+func StreamPortMax() int {
+	if val := os.Getenv("STREAM_PORT_MAX"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 19999
 }

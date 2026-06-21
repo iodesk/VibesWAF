@@ -6,7 +6,6 @@ import { useToast } from '@/components/ui/toast'
 import { Tabs } from '@/components/ui/tabs'
 import {
   Plus,
-  Shield,
   ShieldAlert,
   Globe,
   ChevronLeft,
@@ -18,7 +17,6 @@ import {
 import { IPAccessSection } from '@/components/ip-access/IPAccessSection'
 import { AppRulesSection } from '@/components/rules/AppRulesSection'
 import { BasicTab } from './tabs/BasicTab'
-import { SecurityTab } from './tabs/SecurityTab'
 import { AdvancedTab } from './tabs/AdvancedTab'
 import type { AppCreateRequest, AppConfig } from '@/lib/api-client'
 
@@ -27,16 +25,6 @@ const defaultAppConfig: AppConfig = {
     { scheme: 'http', host: '', port: 80, weight: 1, enabled: true }
   ],
   lb_method: 'round-robin',
-  use_global_rate_limit: true,
-  rate_limits: [
-    { type: 'BasicAccess', duration: 60, count: 100, action: 'challenge', challenge_sec: 300 },
-    { type: 'Attack', duration: 1, count: 10, action: 'block', challenge_sec: 600 },
-    { type: 'Error', duration: 1, count: 20, action: 'challenge', challenge_sec: 300 }
-  ],
-  use_global_waf: true,
-  waf: { score_threshold: 20 },
-  use_global_bot: true,
-  bot: { enable_challenge: true, challenge_type: 'js', challenge_expiry: 300, challenge_wait: 5 },
   redirect_https: false,
   health_check: {
     enabled: false,
@@ -130,7 +118,7 @@ export default function AppForm() {
     (formData.config.upstreams[0].scheme === 'tcp' || formData.config.upstreams[0].scheme === 'udp')
 
   useEffect(() => {
-    if (isStream && (activeTab === 'security' || activeTab === 'advanced' || activeTab === 'rules')) {
+    if (isStream && (activeTab === 'advanced' || activeTab === 'rules')) {
       setActiveTab('basic')
     }
   }, [isStream])
@@ -173,13 +161,6 @@ export default function AppForm() {
 
   const tabList = [
     { value: 'basic', label: 'Basic', icon: <Globe className="w-3.5 h-3.5" /> },
-    {
-      value: 'security',
-      label: 'WAF',
-      icon: <Shield className="w-3.5 h-3.5" />,
-      disabled: isStream,
-      disabledTooltip: 'WAF, Bot, and Rate Limit are not available for TCP/UDP applications'
-    },
     {
       value: 'advanced',
       label: 'Advanced',
@@ -271,13 +252,6 @@ export default function AppForm() {
               formData={formData}
               isEdit={isEdit}
               setFormData={setFormData}
-              updateConfig={updateConfig}
-            />
-          )}
-
-          {activeTab === 'security' && (
-            <SecurityTab
-              config={formData.config}
               updateConfig={updateConfig}
             />
           )}

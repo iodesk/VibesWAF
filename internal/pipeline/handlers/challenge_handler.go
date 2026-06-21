@@ -3,22 +3,26 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/vibeswaf/waf/internal/challenge"
 	"github.com/vibeswaf/waf/internal/config"
 	"github.com/vibeswaf/waf/internal/pages"
 	"github.com/vibeswaf/waf/internal/pipeline"
+	"github.com/vibeswaf/waf/internal/service"
 )
 
 type ChallengeHandler struct {
 	registry *challenge.Registry
 	store    *challenge.Store
+	botSvc   *service.BotDetectionService
 	appCfg   *config.AppConfig
 }
 
-func NewChallengeHandler(registry *challenge.Registry, store *challenge.Store) *ChallengeHandler {
+func NewChallengeHandler(registry *challenge.Registry, store *challenge.Store, botSvc *service.BotDetectionService) *ChallengeHandler {
 	return &ChallengeHandler{
 		registry: registry,
 		store:    store,
+		botSvc:   botSvc,
 		appCfg:   config.GetAppConfig(),
 	}
 }
@@ -63,6 +67,9 @@ func (h *ChallengeHandler) serveChallenge(ctx *pipeline.Context) {
 
 	target, _ := data.Payload["target"].(int)
 
+	botCfg := h.botSvc.GetConfig()
+	rayID := generateRayID()
+
 	pages.ServeChallengePage(ctx.Writer, pages.ChallengePageData{
 		ChallengeID: data.ID,
 		Type:        data.Type,
@@ -70,5 +77,16 @@ func (h *ChallengeHandler) serveChallenge(ctx *pipeline.Context) {
 		MaxAttempts: h.store.MaxRetries(),
 		Timeout:     h.store.TTLSeconds(),
 		Host:        ctx.Request.Host,
+		Title:       botCfg.Challenge.Title,
+		Description: botCfg.Challenge.Description,
+		Footer:      botCfg.Challenge.Footer,
+		CustomHTML:  botCfg.Challenge.CustomHTML,
+		ShowRayID:   botCfg.Challenge.ShowRayID,
+		RayID:       rayID,
 	})
+}
+
+func generateRayID() string {
+	id := uuid.New()
+	return id.String()[:13]
 }

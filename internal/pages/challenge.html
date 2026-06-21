@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<title>Security Check — {{.Host}}</title>
+<title>{{.Title}}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
@@ -62,9 +62,9 @@ footer{padding:20px 48px;border-top:1px solid #1f1f1f;display:flex;align-items:c
 </header>
 <main>
 <div class="content">
-<div class="eyebrow">Security Check</div>
-<h1>Verify you are human</h1>
-<p class="desc">Slide the handle to the highlighted zone to prove you are not bot.</p>
+<div class="eyebrow">{{.Title}}</div>
+<h1>{{.Title}}</h1>
+<p class="desc">{{.Description}}</p>
 <div class="slider-box">
 <div class="slider-label">Drag to the target zone</div>
 <div class="track" id="track">
@@ -88,20 +88,24 @@ footer{padding:20px 48px;border-top:1px solid #1f1f1f;display:flex;align-items:c
 <div class="meta-block">
 <span class="meta-label">Status</span>
 <span class="meta-value" id="meta-status">Pending</span>
-</div>
-</div>
-</div>
+			</div>
+{{if .ShowRayID}}
+			<div class="meta-block">
+				<span class="meta-label">Ray ID</span>
+				<span class="meta-value">{{.RayID}}</span>
+			</div>
+{{end}}
+		</div>
+	</div>
 </main>
 <footer>
-<span class="footer-left"></span>
-<span class="footer-right">Protected by <span>Vibes WAF</span></span>
+<span class="footer-left">{{.Footer}}</span>
+<span class="footer-right">{{if .CustomHTML}}{{.CustomHTML}}{{end}}{{if .ShowRayID}} Ray ID: {{.RayID}}{{end}}</span>
 </footer>
 <script>
 (function() {
   var challengeID = "{{.ChallengeID}}";
-  var _k = {{.ObfKey}};
-  var _t = {{.ObfTarget}};
-  var target = _t ^ _k;
+  var target = {{.Target}};
   var maxAttempts = {{.MaxAttempts}};
   var timeout = {{.Timeout}};
   var startTime = Date.now();

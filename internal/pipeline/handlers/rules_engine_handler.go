@@ -32,9 +32,8 @@ func (h *RulesEngineHandler) Handle(ctx *pipeline.Context) error {
 		return nil
 	}
 	if ctx.ChallengePassed {
-		h.appCfg.LogDebug("[RULES] Skipped: challenge already passed")
-		ctx.AddTrace(pipeline.StageTrace{Stage: "custom_rules", Result: "SKIP"})
-		return nil
+		h.appCfg.LogDebug("[RULES] Challenge passed - only skip/log rules apply")
+		return h.evaluateChallengePassed(ctx)
 	}
 
 	appID := "default"
@@ -107,6 +106,66 @@ func (h *RulesEngineHandler) Handle(ctx *pipeline.Context) error {
 	}
 
 	ctx.AddTrace(pipeline.StageTrace{Stage: "custom_rules", Result: "PASS"})
+	return nil
+}
+
+// evaluateChallengePassed processes rules when the user has a valid challenge cookie.
+// Only non-terminal actions (skip, log) are honoured; block/challenge/allow are ignored
+// because the challenge cookie already proves the user is human.
+func (h *RulesEngineHandler) evaluateChallengePassed(ctx *pipeline.Context) error {
+	appID := "default"
+	if ctx.AppID != "" {
+		appID = ctx.AppID
+	}
+
+	rules, err := h.ruleService.LoadMergedRules(appID)
+	if err != nil {
+		h.appCfg.LogError("[RULES] Failed to load rules for app %s: %v", appID, err)
+		ctx.AddTrace(pipeline.StageTrace{Stage: "custom_rules", Result: "ERROR", Reason: err.Error()})
+		return nil
+	}
+
+	skippedModules := false
+
+	for _, r := range rules {
+		if !r.Enabled {
+			continue
+		}
+
+		matched, err := h.ruleService.EvaluateRule(r, ctx)
+		if err != nil {
+			h.appCfg.LogError("[RULES] Failed to evaluate rule '%s' (ID:%d): %v", r.Name, r.ID, err)
+			continue
+		}
+
+		if !matched {
+			continue
+		}
+
+		switch r.Action {
+		case "skip":
+			decision := pipeline.NewSkipDecision("custom_rule", r.SkipModules)
+			ctx.AddDecision(decision)
+			ctx.AddSkipModules(r.SkipModules)
+			h.appCfg.LogDebug("[RULES] Challenge-passed skip: modules %v by rule '%s'", r.SkipModules, r.Name)
+			h.recordRuleMatch(ctx, r.ID, r.Name, r.Action, r.Scope)
+			skippedModules = true
+
+		case "log":
+			h.appCfg.LogDebug("[RULES] Challenge-passed log match for rule '%s'", r.Name)
+			h.recordRuleMatch(ctx, r.ID, r.Name, r.Action, r.Scope)
+
+		default:
+			// block, challenge, allow: ignored for challenge-passed users
+			h.appCfg.LogDebug("[RULES] Ignoring rule '%s' (action=%s) for challenge-passed user", r.Name, r.Action)
+		}
+	}
+
+	if skippedModules {
+		ctx.AddTrace(pipeline.StageTrace{Stage: "custom_rules", Result: "SKIP_MODULES"})
+	} else {
+		ctx.AddTrace(pipeline.StageTrace{Stage: "custom_rules", Result: "PASS"})
+	}
 	return nil
 }
 

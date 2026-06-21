@@ -6,13 +6,12 @@ import (
 	"unsafe"
 
 	appcfg "github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/domain/app"
 	"github.com/vibeswaf/waf/internal/model"
 	"github.com/vibeswaf/waf/internal/ratelimit"
 	"github.com/vibeswaf/waf/internal/repository"
 )
 
-// globalRLState is swapped atomically on reload — zero lock on hot path.
+// globalRLState is swapped atomically on reload - zero lock on hot path.
 type globalRLState struct {
 	cfg     model.RateLimitConfig
 	limiter *ratelimit.RateLimiter
@@ -20,12 +19,11 @@ type globalRLState struct {
 
 type RateLimitService struct {
 	settingsRepo *repository.SettingsRepository
-	appService   *AppService
 
-	// state is read via atomic load on every request — zero lock contention.
+	// state is read via atomic load on every request - zero lock contention.
 	state unsafe.Pointer // *globalRLState
 
-	// hit counters per profile type — incremented atomically
+	// hit counters per profile type - incremented atomically
 	hitsBasic  int64
 	hitsAttack int64
 	hitsError  int64
@@ -34,10 +32,9 @@ type RateLimitService struct {
 	stopCh         chan struct{}
 }
 
-func NewRateLimitService(settingsRepo *repository.SettingsRepository, appService *AppService) *RateLimitService {
+func NewRateLimitService(settingsRepo *repository.SettingsRepository) *RateLimitService {
 	s := &RateLimitService{
 		settingsRepo:   settingsRepo,
-		appService:     appService,
 		reloadInterval: 30 * time.Second,
 		stopCh:         make(chan struct{}),
 	}
@@ -60,7 +57,6 @@ func (s *RateLimitService) getState() *globalRLState {
 }
 
 // GetConfig returns the cached rate limit config via an atomic read.
-// Used by the flood handler to avoid a DB query on the request path.
 func (s *RateLimitService) GetConfig() model.RateLimitConfig {
 	return s.getState().cfg
 }
@@ -80,8 +76,6 @@ func (s *RateLimitService) autoReload() {
 			}
 
 			old := s.getState()
-
-			// Create fresh limiter — old entries drain via TTL in the old one.
 			limiter := ratelimit.NewRateLimiter()
 			next := &globalRLState{cfg: cfg, limiter: limiter}
 			atomic.StorePointer(&s.state, unsafe.Pointer(next))
@@ -105,81 +99,33 @@ func (s *RateLimitService) Stop() {
 	}
 }
 
-// resolveProfile returns the effective rate limit profile for an app.
-// Per-app config overrides global when UseGlobalRateLimit=false.
-func (s *RateLimitService) resolveProfile(appID string) (count int, duration int, action string, enabled bool) {
+// Allow returns (allowed bool, action string).
+func (s *RateLimitService) Allow(appID, clientIP, userAgent string) (bool, string) {
 	globalCfg := s.getState().cfg
 	basic := globalCfg.Basic
 
-	count = basic.Count
-	duration = basic.Duration
-	action = basic.Action
-	enabled = basic.Enabled
-
-	if appID == "default" || s.appService == nil {
-		return
-	}
-
-	appCfg, err := s.appService.GetApp(appID)
-	if err != nil || appCfg == nil {
-		return
-	}
-
-	if appCfg.Config.UseGlobalRateLimit {
-		return
-	}
-
-	var profile *app.RateLimitProfile
-	for i := range appCfg.Config.RateLimits {
-		rl := &appCfg.Config.RateLimits[i]
-		if rl.Type == "Standard" || rl.Type == "" || profile == nil {
-			profile = rl
-			if rl.Type == "Standard" {
-				break
-			}
-		}
-	}
-
-	if profile != nil && profile.Count > 0 && profile.Duration > 0 {
-		count = profile.Count
-		duration = profile.Duration
-		action = profile.Action
-		enabled = true
-	}
-
-	return
-}
-
-// Allow returns (allowed bool, action string).
-// action is the configured response when rate limit is exceeded.
-func (s *RateLimitService) Allow(appID, clientIP, userAgent string) (bool, string) {
-	count, duration, action, enabled := s.resolveProfile(appID)
-
-	if !enabled || count <= 0 || duration <= 0 {
-		appcfg.GetAppConfig().LogDebug("[RATE_LIMIT_SVC] Disabled for app=%s (enabled=%v count=%d duration=%d)", appID, enabled, count, duration)
+	if !basic.Enabled || basic.Count <= 0 || basic.Duration <= 0 {
+		appcfg.GetAppConfig().LogDebug("[RATE_LIMIT_SVC] Disabled for app=%s", appID)
 		return true, ""
 	}
 
-	appcfg.GetAppConfig().LogDebug("[RATE_LIMIT_SVC] Checking app=%s ip=%s limit=%d/%ds", appID, clientIP, count, duration)
-
-	refillRate := float64(count) / float64(max(duration, 1))
+	refillRate := float64(basic.Count) / float64(max(basic.Duration, 1))
 	key := ratelimit.GenerateKey(clientIP, userAgent)
 	bucketKey := appID + ":" + key
 
 	st := s.getState()
-	allowed := st.limiter.Allow(bucketKey, count, refillRate)
+	allowed := st.limiter.Allow(bucketKey, basic.Count, refillRate)
 
 	if !allowed {
 		appcfg.GetAppConfig().LogInfo("[RATE_LIMIT] blocked app=%s ip=%s (limit: %d req/%ds action=%s)",
-			appID, clientIP, count, duration, action)
+			appID, clientIP, basic.Count, basic.Duration, basic.Action)
 		atomic.AddInt64(&s.hitsBasic, 1)
 	}
 
-	return allowed, action
+	return allowed, basic.Action
 }
 
 // InvalidateCache stops the current limiter and creates a fresh one.
-// appID is accepted for interface compatibility but all entries are reset.
 func (s *RateLimitService) InvalidateCache(appID string) {
 	old := s.getState()
 	cfg := old.cfg
@@ -193,12 +139,12 @@ func (s *RateLimitService) InvalidateCache(appID string) {
 	}
 }
 
-// RecordAttackHit increments the attack hit counter (called by flood handler).
+// RecordAttackHit increments the attack hit counter.
 func (s *RateLimitService) RecordAttackHit() {
 	atomic.AddInt64(&s.hitsAttack, 1)
 }
 
-// RecordErrorHit increments the error hit counter (called by flood handler).
+// RecordErrorHit increments the error hit counter.
 func (s *RateLimitService) RecordErrorHit() {
 	atomic.AddInt64(&s.hitsError, 1)
 }

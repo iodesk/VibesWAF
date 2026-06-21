@@ -1,23 +1,3 @@
-export interface RateLimitProfile {
-  type: string;
-  duration: number;
-  count: number;
-  action: string;
-  challenge_sec: number;
-}
-
-export interface WAFProfile {
-  score_threshold: number;
-  outbound_score_threshold?: number;
-}
-
-export interface BotProfile {
-  enable_challenge: boolean;
-  challenge_type: string;
-  challenge_expiry: number;
-  challenge_wait: number;
-}
-
 export interface Upstream {
   scheme: "http" | "https" | "tcp" | "udp";
   host: string;
@@ -77,12 +57,6 @@ export interface AppConfig {
   upstreams: Upstream[];
   lb_method: "round-robin" | "least-conn" | "ip-hash";
   listen_port?: number;
-  use_global_rate_limit: boolean;
-  rate_limits?: RateLimitProfile[];
-  use_global_waf: boolean;
-  waf?: WAFProfile;
-  use_global_bot: boolean;
-  bot?: BotProfile;
   redirect_https: boolean;
   health_check: HealthCheckConfig;
   advanced?: AdvancedConfig;

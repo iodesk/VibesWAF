@@ -1,18 +1,17 @@
 package metrics
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
 
-
 type RequestMetrics struct {
-	WallTime time.Duration
-	CPUTime  time.Duration
-	WaitTime time.Duration
+	WallTime  time.Duration
+	CPUTime   time.Duration
+	WaitTime  time.Duration
 	Timestamp time.Time
 }
-
 
 type PerformanceTracker struct {
 	mu      sync.RWMutex
@@ -20,22 +19,21 @@ type PerformanceTracker struct {
 	window  time.Duration
 }
 
-
 type Stats struct {
-	P50LatencyMs     float64 `json:"p50_latency_ms"`
-	P90LatencyMs     float64 `json:"p90_latency_ms"`
-	P95LatencyMs     float64 `json:"p95_latency_ms"`
-	P99LatencyMs     float64 `json:"p99_latency_ms"`
-	AvgLatencyMs     float64 `json:"avg_latency_ms"`
-	AvgPipelineMs    float64 `json:"avg_pipeline_ms"`
-	AvgUpstreamMs    float64 `json:"avg_upstream_ms"`
-	P50PipelineMs    float64 `json:"p50_pipeline_ms"`
-	P95PipelineMs    float64 `json:"p95_pipeline_ms"`
-	P99PipelineMs    float64 `json:"p99_pipeline_ms"`
-	P50UpstreamMs    float64 `json:"p50_upstream_ms"`
-	P95UpstreamMs    float64 `json:"p95_upstream_ms"`
-	P99UpstreamMs    float64 `json:"p99_upstream_ms"`
-	RequestCount     int     `json:"request_count"`
+	P50LatencyMs  float64 `json:"p50_latency_ms"`
+	P90LatencyMs  float64 `json:"p90_latency_ms"`
+	P95LatencyMs  float64 `json:"p95_latency_ms"`
+	P99LatencyMs  float64 `json:"p99_latency_ms"`
+	AvgLatencyMs  float64 `json:"avg_latency_ms"`
+	AvgPipelineMs float64 `json:"avg_pipeline_ms"`
+	AvgUpstreamMs float64 `json:"avg_upstream_ms"`
+	P50PipelineMs float64 `json:"p50_pipeline_ms"`
+	P95PipelineMs float64 `json:"p95_pipeline_ms"`
+	P99PipelineMs float64 `json:"p99_pipeline_ms"`
+	P50UpstreamMs float64 `json:"p50_upstream_ms"`
+	P95UpstreamMs float64 `json:"p95_upstream_ms"`
+	P99UpstreamMs float64 `json:"p99_upstream_ms"`
+	RequestCount  int     `json:"request_count"`
 }
 
 var globalTracker *PerformanceTracker
@@ -44,7 +42,6 @@ func init() {
 	globalTracker = NewPerformanceTracker(5 * time.Minute)
 }
 
-
 func NewPerformanceTracker(window time.Duration) *PerformanceTracker {
 	return &PerformanceTracker{
 		metrics: make([]RequestMetrics, 0, 10000),
@@ -52,16 +49,13 @@ func NewPerformanceTracker(window time.Duration) *PerformanceTracker {
 	}
 }
 
-
 func Record(wallTime, cpuTime time.Duration) {
 	globalTracker.Record(wallTime, cpuTime)
 }
 
-
 func GetStats() Stats {
 	return globalTracker.GetStats()
 }
-
 
 func (pt *PerformanceTracker) Record(wallTime, cpuTime time.Duration) {
 	pt.mu.Lock()
@@ -81,7 +75,6 @@ func (pt *PerformanceTracker) Record(wallTime, cpuTime time.Duration) {
 
 	pt.metrics = append(pt.metrics, metric)
 
-
 	cutoff := time.Now().Add(-pt.window)
 	validIdx := 0
 	for i, m := range pt.metrics {
@@ -95,38 +88,38 @@ func (pt *PerformanceTracker) Record(wallTime, cpuTime time.Duration) {
 	}
 }
 
-
 func (pt *PerformanceTracker) GetStats() Stats {
 	pt.mu.RLock()
-	defer pt.mu.RUnlock()
-
-	if len(pt.metrics) == 0 {
+	count := len(pt.metrics)
+	if count == 0 {
+		pt.mu.RUnlock()
 		return Stats{}
 	}
 
-
+	// Copy metrics outside the lock so sorting does not block writers.
 	cutoff := time.Now().Add(-pt.window)
-	var validMetrics []RequestMetrics
+	snapshot := make([]RequestMetrics, 0, count)
 	for _, m := range pt.metrics {
 		if m.Timestamp.After(cutoff) {
-			validMetrics = append(validMetrics, m)
+			snapshot = append(snapshot, m)
 		}
 	}
+	pt.mu.RUnlock()
 
-	if len(validMetrics) == 0 {
+	if len(snapshot) == 0 {
 		return Stats{}
 	}
 
-
-	latencies := make([]float64, len(validMetrics))
-	pipelineLatencies := make([]float64, len(validMetrics))
-	upstreamLatencies := make([]float64, len(validMetrics))
+	latencies := make([]float64, len(snapshot))
+	pipelineLatencies := make([]float64, len(snapshot))
+	upstreamLatencies := make([]float64, len(snapshot))
 	var totalLatency, totalPipeline, totalUpstream float64
 
-	for i, m := range validMetrics {
-		latencyMs := float64(m.WallTime.Microseconds()) / 1000.0
-		pipelineMs := float64(m.CPUTime.Microseconds()) / 1000.0
-		upstreamMs := float64(m.WaitTime.Microseconds()) / 1000.0
+	for i, m := range snapshot {
+		// Nanoseconds avoids sub-microsecond truncation.
+		latencyMs := float64(m.WallTime.Nanoseconds()) / 1_000_000.0
+		pipelineMs := float64(m.CPUTime.Nanoseconds()) / 1_000_000.0
+		upstreamMs := float64(m.WaitTime.Nanoseconds()) / 1_000_000.0
 		latencies[i] = latencyMs
 		pipelineLatencies[i] = pipelineMs
 		upstreamLatencies[i] = upstreamMs
@@ -135,12 +128,11 @@ func (pt *PerformanceTracker) GetStats() Stats {
 		totalUpstream += upstreamMs
 	}
 
+	sort.Float64s(latencies)
+	sort.Float64s(pipelineLatencies)
+	sort.Float64s(upstreamLatencies)
 
-	sortFloat64(latencies)
-	sortFloat64(pipelineLatencies)
-	sortFloat64(upstreamLatencies)
-
-	n := float64(len(validMetrics))
+	n := float64(len(snapshot))
 	return Stats{
 		P50LatencyMs:  percentile(latencies, 0.50),
 		P90LatencyMs:  percentile(latencies, 0.90),
@@ -155,33 +147,24 @@ func (pt *PerformanceTracker) GetStats() Stats {
 		P50UpstreamMs: percentile(upstreamLatencies, 0.50),
 		P95UpstreamMs: percentile(upstreamLatencies, 0.95),
 		P99UpstreamMs: percentile(upstreamLatencies, 0.99),
-		RequestCount:  len(validMetrics),
+		RequestCount:  len(snapshot),
 	}
 }
 
-
+// percentile returns the p-th percentile using the nearest-rank method.
+// p must be in [0.0, 1.0]. For example, p=0.95 returns the value below
+// which 95% of observations fall.
 func percentile(sorted []float64, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(float64(len(sorted)-1) * p)
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= len(sorted) {
-		idx = len(sorted) - 1
+	// Nearest-rank: idx = ceil(N * p) - 1
+	idx := int(float64(len(sorted))*p + 0.999999)
+	switch {
+	case idx < 0:
+		return sorted[0]
+	case idx >= len(sorted):
+		return sorted[len(sorted)-1]
 	}
 	return sorted[idx]
-}
-
-
-func sortFloat64(arr []float64) {
-	n := len(arr)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if arr[j] > arr[j+1] {
-				arr[j], arr[j+1] = arr[j+1], arr[j]
-			}
-		}
-	}
 }

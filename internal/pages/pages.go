@@ -176,6 +176,12 @@ type ChallengePageData struct {
 	MaxAttempts int
 	Timeout     int
 	Host        string
+	Title       string
+	Description string
+	Footer      string
+	CustomHTML  string
+	ShowRayID   bool
+	RayID       string
 }
 
 func ServeChallengePage(w http.ResponseWriter, data ChallengePageData) {

@@ -65,9 +65,6 @@ func (p *Postgres) GetAppConfig(domain string) (*model.AppConfig, error) {
 		return &model.AppConfig{
 			AppID:              "default",
 			Domain:             domain,
-			UseGlobalRateLimit: true,
-			UseGlobalWAF:       true,
-			UseGlobalBot:       true,
 		}, nil
 	}
 

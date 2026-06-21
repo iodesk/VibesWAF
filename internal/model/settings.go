@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+
+type RateLimitProfile struct {
+	Type         string `json:"type,omitempty"`
+	Enabled      bool   `json:"enabled"`
+	Duration     int    `json:"duration"`
+	Count        int    `json:"count"`
+	Action       string `json:"action"`
+	ChallengeSec int    `json:"challenge_sec"`
+}
+
 type Setting struct {
 	Key       string          `db:"key"`
 	Value     json.RawMessage `db:"value"`
