@@ -1,6 +1,21 @@
 # Changelog
 
 
+## [1.0.3] - 2026-06-30
+
+### Changed
+
+- Enhanced pipeline trace with structured evidence for fingerprinting. Added `RequestMetadata` (ip, method, path, host, user_agent, ja4, ja4h, ja4h_ua_hash, actual_ua_hash, ua_match, http_fingerprint) to trace root. Each stage now captures structured evidence: BotDetection (signals array), WAF (matched rules with ID/category/severity), ProtocolAnomaly (violations array with type/score/detail), IPAccess (matched_rule, ip_range, action), CustomRules (id, name, action, scope), DecisionCache (action, source, reason). (`internal/pipeline/trace.go`, `internal/pipeline/pipeline.go`, handlers/)
+- Frontend pipeline trace UI now shows only `reason` field; full JSON with `reason` + `evidence` available in Raw JSON toggle. (`frontend/src/pages/monitoring/Logs.tsx`)
+- Added `FingerprintSection` to pipeline trace UI showing JA4, JA4H, JA4H_UA_Hash, ActualUA_Hash, and UA_Match comparison for admin observation. (`frontend/src/pages/monitoring/Logs.tsx`)
+- Enhanced stable session scorer with IP+JA4+fingerprint matching. Stored format: `ja4|ja4h_ua_hash|fingerprint`. Evidence now includes `ja4_match`, `ja4h_match`, `fp_match` booleans. (`internal/pipeline/handlers/stable_session_scorer.go`)
+
+### Internal
+
+- `const Version = "1.0.3"` in `internal/config/app_config.go`.
+
+---
+
 ## [1.0.2] - 2026-06-13
 
 ### Security

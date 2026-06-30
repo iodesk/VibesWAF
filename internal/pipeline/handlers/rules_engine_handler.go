@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/vibeswaf/waf/internal/cache"
@@ -8,6 +9,13 @@ import (
 	"github.com/vibeswaf/waf/internal/pipeline"
 	"github.com/vibeswaf/waf/internal/service"
 )
+
+type RuleMatchEvidence struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+	Scope  string `json:"scope"`
+}
 
 type RulesEngineHandler struct {
 	ruleService   *service.RuleService
@@ -76,15 +84,21 @@ func (h *RulesEngineHandler) Handle(ctx *pipeline.Context) error {
 			h.recordRuleMatch(ctx, r.ID, r.Name, r.Action, r.Scope)
 			h.decisionCache.Set(ctx, r.Action, "custom_rule", reason)
 
+			evidence := RuleMatchEvidence{
+				ID:     r.ID,
+				Name:   r.Name,
+				Action: r.Action,
+				Scope:  r.Scope,
+			}
+			evidenceJSON, _ := json.Marshal(evidence)
 			ctx.AddTrace(pipeline.StageTrace{
-				Stage:  "custom_rules",
-				Result: toResult(r.Action),
-				RuleID: fmt.Sprintf("%d", r.ID),
-				Reason: r.Name,
+				Stage:    "custom_rules",
+				Result:   toResult(r.Action),
+				RuleID:   fmt.Sprintf("%d", r.ID),
+				Reason:   r.Name,
+				Evidence: json.RawMessage(evidenceJSON),
 			})
 
-			// Mark as hard decision so Phase 2 is skipped.
-			// Allow is also hard: "I trust this, fast-track to proxy."
 			ctx.HardDecision = true
 			return nil
 

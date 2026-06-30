@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/vibeswaf/waf/internal/cache"
@@ -12,6 +14,15 @@ import (
 
 const stableSessionKeyPrefix = "ss:"
 const stableSessionTTL = 4 * time.Hour
+
+const storedFieldCount = 3
+
+type StableSessionEvidence struct {
+	JA4Match   bool   `json:"ja4_match"`
+	JA4HMatch  bool   `json:"ja4h_match"`
+	FPMatch    bool   `json:"fp_match"`
+	Reduction  int    `json:"reduction"`
+}
 
 type StableSessionScorer struct {
 	getConfig func() *model.ScoringConfig
@@ -46,7 +57,10 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 		return nil
 	}
 
+	ja4 := ctx.GetExtraString("ja4")
+	ja4hUAHash := ctx.GetExtraString("ja4h_ua_hash")
 	fingerprint := ctx.HTTPFingerprint
+
 	if fingerprint == "" {
 		return nil
 	}
@@ -54,38 +68,76 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 	key := stableSessionKeyPrefix + ctx.ClientIP
 	stored, err := h.redis.Get(context.Background(), key)
 
-	if err != nil {
-		// No stored fingerprint yet — record it, no reduction yet
-		h.redis.Set(context.Background(), key, fingerprint, stableSessionTTL)
+	if err != nil || stored == "" {
+		newValue := buildStoredValue(ja4, ja4hUAHash, fingerprint)
+		h.redis.Set(context.Background(), key, newValue, stableSessionTTL)
 		ctx.AddTrace(pipeline.StageTrace{
 			Stage:  "stable_session",
 			Result: "NEW",
-			Reason: "First visit — fingerprint recorded",
+			Reason: "Fingerprint recorded",
 		})
 		return nil
 	}
 
-	if stored == fingerprint {
-		// Fingerprint matches — consistent session, apply reduction
-		// Refresh TTL on match to keep active sessions trusted
-		h.redis.Set(context.Background(), key, fingerprint, stableSessionTTL)
+	parts := strings.Split(stored, "|")
+
+	var storedJA4, storedJA4H, storedFP string
+	if len(parts) >= storedFieldCount {
+		storedJA4 = parts[0]
+		storedJA4H = parts[1]
+		storedFP = parts[2]
+	} else {
+		storedJA4 = ""
+		storedJA4H = ""
+		storedFP = stored
+	}
+
+	ja4Match := storedJA4 == ja4 && ja4 != ""
+	ja4hMatch := storedJA4H == ja4hUAHash && ja4hUAHash != ""
+	fpMatch := storedFP == fingerprint
+
+	if ja4Match && fpMatch {
+		newValue := buildStoredValue(ja4, ja4hUAHash, fingerprint)
+		h.redis.Set(context.Background(), key, newValue, stableSessionTTL)
 		ctx.AddScore(pipeline.ScoreCategoryTrust, "stable_session", reduction)
 		h.appCfg.LogDebug("[TRUST] Stable session: ip=%s reduction=%d", ctx.ClientIP, reduction)
+
+		evidence := StableSessionEvidence{
+			JA4Match:  ja4Match,
+			JA4HMatch: ja4hMatch,
+			FPMatch:   fpMatch,
+			Reduction: reduction,
+		}
+		evidenceJSON, _ := json.Marshal(evidence)
 		ctx.AddTrace(pipeline.StageTrace{
-			Stage:  "stable_session",
-			Score:  reduction,
-			Reason: "Consistent session fingerprint",
+			Stage:    "stable_session",
+			Score:    reduction,
+			Reason:   "Stable session matched",
+			Evidence: json.RawMessage(evidenceJSON),
 		})
 	} else {
-		// Fingerprint changed — update to new fingerprint, no reduction
-		h.redis.Set(context.Background(), key, fingerprint, stableSessionTTL)
-		h.appCfg.LogDebug("[TRUST] Stable session changed: ip=%s", ctx.ClientIP)
+		newValue := buildStoredValue(ja4, ja4hUAHash, fingerprint)
+		h.redis.Set(context.Background(), key, newValue, stableSessionTTL)
+		h.appCfg.LogDebug("[TRUST] Stable session mismatch: ip=%s", ctx.ClientIP)
+
+		evidence := StableSessionEvidence{
+			JA4Match:  ja4Match,
+			JA4HMatch: ja4hMatch,
+			FPMatch:   fpMatch,
+			Reduction: 0,
+		}
+		evidenceJSON, _ := json.Marshal(evidence)
 		ctx.AddTrace(pipeline.StageTrace{
-			Stage:  "stable_session",
-			Result: "CHANGED",
-			Reason: "Fingerprint changed — no trust reduction",
+			Stage:    "stable_session",
+			Result:   "CHANGED",
+			Reason:   "Fingerprint changed",
+			Evidence: json.RawMessage(evidenceJSON),
 		})
 	}
 
 	return nil
+}
+
+func buildStoredValue(ja4, ja4hUAHash, fingerprint string) string {
+	return ja4 + "|" + ja4hUAHash + "|" + fingerprint
 }

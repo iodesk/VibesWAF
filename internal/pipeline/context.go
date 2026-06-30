@@ -96,6 +96,21 @@ func (ctx *Context) GetExtra(key string) (interface{}, bool) {
 	return v, ok
 }
 
+// GetExtraString returns the string value for a key, or empty string if not found.
+func (ctx *Context) GetExtraString(key string) string {
+	if ctx.Extra == nil {
+		return ""
+	}
+	v, ok := ctx.Extra[key]
+	if !ok {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
 // GetMetadata projects the typed signals (plus Extra) into a map for consumers
 // that require dynamic key access, principally the custom rule engine. It is
 // only invoked when a rule references a metadata-backed field, so the common

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,18 @@ import (
 	"github.com/vibeswaf/waf/internal/service"
 	"github.com/vibeswaf/waf/internal/waf"
 )
+
+type WAFMatchedRule struct {
+	ID       int    `json:"id"`
+	Category string `json:"category"`
+	Severity int    `json:"severity"`
+}
+
+type WAFEvidence struct {
+	AnomalyScore  int            `json:"anomaly_score"`
+	MatchedRules  []WAFMatchedRule `json:"matched_rules"`
+	TriggerRule   string         `json:"trigger_rule,omitempty"`
+}
 
 type WAFEngineHandler struct {
 	wafService *service.WAFService
@@ -48,18 +61,20 @@ func (h *WAFEngineHandler) Handle(ctx *pipeline.Context) error {
 	ctx.SetExtra("waf_matched_rules", result.MatchedRules)
 
 	if result.AnomalyScore > 0 {
-		// Build detailed rule ID string from actual detection rules
 		ruleID := h.buildRuleID(result)
 		reason := h.buildReason(result)
+		evidence := h.buildEvidence(result)
 
 		ctx.AddScore(pipeline.ScoreCategoryWAFAnomaly, ruleID, result.AnomalyScore)
 		h.appCfg.LogDebug("[WAF_ENGINE] Contributed score=%d to risk scoring (%s)", result.AnomalyScore, reason)
+
+		evidenceJSON, _ := json.Marshal(evidence)
 		ctx.AddTrace(pipeline.StageTrace{
 			Stage:    "waf_anomaly",
 			Score:    result.AnomalyScore,
 			RuleID:   ruleID,
 			Reason:   reason,
-			Evidence: h.buildEvidence(result),
+			Evidence: json.RawMessage(evidenceJSON),
 		})
 	} else {
 		ctx.AddTrace(pipeline.StageTrace{Stage: "waf_anomaly", Score: 0})
@@ -68,7 +83,6 @@ func (h *WAFEngineHandler) Handle(ctx *pipeline.Context) error {
 	return nil
 }
 
-// buildRuleID returns a comma-separated list of detection rule IDs.
 func (h *WAFEngineHandler) buildRuleID(result *waf.WAFResult) string {
 	if len(result.MatchedRules) == 0 {
 		return "owasp_crs:" + result.TriggerRule
@@ -80,7 +94,6 @@ func (h *WAFEngineHandler) buildRuleID(result *waf.WAFResult) string {
 	return strings.Join(ids, ",")
 }
 
-// buildReason returns a human-readable reason with categories.
 func (h *WAFEngineHandler) buildReason(result *waf.WAFResult) string {
 	if len(result.MatchedRules) == 0 {
 		return "OWASP CRS match"
@@ -96,14 +109,18 @@ func (h *WAFEngineHandler) buildReason(result *waf.WAFResult) string {
 	return strings.Join(parts, ",")
 }
 
-// buildEvidence returns detailed matched rules info for trace.
-func (h *WAFEngineHandler) buildEvidence(result *waf.WAFResult) string {
-	if len(result.MatchedRules) == 0 {
-		return ""
+func (h *WAFEngineHandler) buildEvidence(result *waf.WAFResult) WAFEvidence {
+	evidence := WAFEvidence{
+		AnomalyScore: result.AnomalyScore,
+		MatchedRules: make([]WAFMatchedRule, 0),
+		TriggerRule:  result.TriggerRule,
 	}
-	parts := make([]string, 0, len(result.MatchedRules))
 	for _, mr := range result.MatchedRules {
-		parts = append(parts, fmt.Sprintf("#%d[%s]", mr.RuleID, mr.Category))
+		evidence.MatchedRules = append(evidence.MatchedRules, WAFMatchedRule{
+			ID:       mr.RuleID,
+			Category: mr.Category,
+			Severity: mr.Severity,
+		})
 	}
-	return strings.Join(parts, " ")
+	return evidence
 }

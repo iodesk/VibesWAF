@@ -4,7 +4,7 @@ import { useLogs, useApps } from '@/hooks/useApi'
 import type { LogEntry } from '@/lib/api/types'
 import { Button } from '@/components/ui/button'
 import { format } from 'date-fns'
-import { ChevronLeft, ChevronRight, Activity, GitBranch, X, ArrowRight, Copy, Check, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Activity, GitBranch, X, ArrowRight, Copy, Check, Search, ChevronDown } from 'lucide-react'
 
 interface StageTrace {
   stage: string
@@ -13,14 +13,29 @@ interface StageTrace {
   multiplier?: number
   final_score?: number
   reason?: string
-  evidence?: string
+  evidence?: any
   rule_id?: string
+}
+
+interface RequestMetadata {
+  ip: string
+  method: string
+  path: string
+  host: string
+  user_agent?: string
+  ja4?: string
+  ja4h?: string
+  ja4h_ua_hash?: string
+  actual_ua_hash?: string
+  ua_match?: boolean
+  http_fingerprint?: string
 }
 
 interface PipelineTrace {
   phase: string
   decision: string
   score?: number
+  request?: RequestMetadata
   stages: StageTrace[]
 }
 
@@ -39,7 +54,7 @@ function stageLabel(stage: string): string {
     ip_access_rule: 'IP Access Rule',
     rate_limit: 'Rate Limit',
     flood: 'Flood Protection',
-    decision_cache: 'Decision Cache',
+    decision_cache: 'Security Rules Cache',
     custom_rules: 'Custom Rules',
     ip_reputation: 'IP Reputation',
     bot_detection: 'Bot Detection',
@@ -64,6 +79,71 @@ function resultColor(result?: string, score?: number): string {
   if (result === 'HIT') return 'text-blue-400'
   if (score !== undefined && score > 0) return 'text-amber-400'
   return 'text-muted-foreground'
+}
+
+function FingerprintSection({ request }: { request: RequestMetadata }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (!request) return null
+
+  const hasData = request.ja4 || request.ja4h || request.http_fingerprint || request.ja4h_ua_hash || request.actual_ua_hash
+  if (!hasData) return null
+
+  return (
+    <div className="mb-3">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span className="text-xs">&#128273;</span>
+        <span>Fingerprint</span>
+        <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="mt-1.5 space-y-1 pl-4 text-[10px] font-mono">
+          {request.ja4 && (
+            <div className="flex gap-2">
+              <span className="text-muted-foreground/60 shrink-0">JA4:</span>
+              <span className="text-foreground truncate" title={request.ja4}>{request.ja4}</span>
+            </div>
+          )}
+          {request.ja4h && (
+            <div className="flex gap-2">
+              <span className="text-muted-foreground/60 shrink-0">JA4H:</span>
+              <span className="text-foreground truncate" title={request.ja4h}>{request.ja4h}</span>
+            </div>
+          )}
+          {request.http_fingerprint && (
+            <div className="flex gap-2">
+              <span className="text-muted-foreground/60 shrink-0">HTTP:</span>
+              <span className="text-foreground truncate" title={request.http_fingerprint}>{request.http_fingerprint}</span>
+            </div>
+          )}
+          {(request.ja4h_ua_hash || request.actual_ua_hash) && (
+            <div className="mt-1.5 pt-1.5 border-t border-border/50">
+              <div className="text-[9px] text-muted-foreground/60 mb-1">UA Hash Comparison</div>
+              <div className="flex gap-2 items-center">
+                <span className="text-muted-foreground/60 shrink-0">JA4H UA:</span>
+                <span className="text-foreground truncate" title={request.ja4h_ua_hash}>{request.ja4h_ua_hash || '-'}</span>
+              </div>
+              <div className="flex gap-2 items-center">
+                <span className="text-muted-foreground/60 shrink-0">Actual UA:</span>
+                <span className="text-foreground truncate" title={request.actual_ua_hash}>{request.actual_ua_hash || '-'}</span>
+              </div>
+              {request.ua_match !== undefined && (
+                <div className="flex gap-2 items-center mt-1">
+                  <span className="text-muted-foreground/60 shrink-0">Match:</span>
+                  <span className={request.ua_match ? 'text-emerald-500' : 'text-red-500'}>
+                    {request.ua_match ? 'YES' : 'MISMATCH'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 
@@ -177,7 +257,6 @@ function PipelineDrawer({ log, onClose }: { log: LogEntry; onClose: () => void }
 
                     return (
                       <div key={i} className="flex gap-3">
-                        {/* Timeline track */}
                         <div className="flex flex-col items-center" style={{ width: '16px', minWidth: '16px' }}>
                           <div className={`rounded-full shrink-0 mt-[14px] ${dotSize} ${dotColor} ${dotRing}`} />
                           {!isLast && (
@@ -191,8 +270,7 @@ function PipelineDrawer({ log, onClose }: { log: LogEntry; onClose: () => void }
                           )}
                         </div>
 
-                        {/* Content */}
-                        <div className={`flex-1 min-w-0 pb-3 ${isLast ? '' : ''}`}>
+                        <div className="flex-1 min-w-0 pb-3">
                           <div
                             className={`flex items-center justify-between gap-2 py-1.5 px-2 rounded-md transition-colors
                               ${isSkipped ? 'opacity-50' : 'hover:bg-muted/40'}`}
@@ -219,21 +297,9 @@ function PipelineDrawer({ log, onClose }: { log: LogEntry; onClose: () => void }
                               )}
                             </div>
                           </div>
-                          {(stage.reason || stage.rule_id || stage.evidence) && (
-                            <div className="px-2 pb-1 space-y-0.5">
-                              {stage.reason && (
-                                <p className="text-[11px] text-muted-foreground leading-relaxed">{stage.reason}</p>
-                              )}
-                              {stage.rule_id && (
-                                <p className="text-[10px] text-muted-foreground/60 font-mono">Rule #{stage.rule_id}</p>
-                              )}
-                              {stage.evidence && (
-                                <p className="text-[10px] font-mono text-red-400 px-1.5 py-0.5 rounded truncate"
-                                  style={{ backgroundColor: 'hsl(var(--color-destructive) / 0.08)' }}
-                                  title={stage.evidence}>
-                                  {stage.evidence}
-                                </p>
-                              )}
+                          {stage.reason && (
+                            <div className="px-2 pb-1">
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">{stage.reason}</p>
                             </div>
                           )}
                         </div>
@@ -242,6 +308,9 @@ function PipelineDrawer({ log, onClose }: { log: LogEntry; onClose: () => void }
                   })}
                 </div>
               </div>
+
+              {/* Fingerprint section */}
+              {trace.request && <FingerprintSection request={trace.request} />}
 
               {/* Raw JSON toggle */}
               <RawJSON raw={raw!} />

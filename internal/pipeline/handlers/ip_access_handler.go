@@ -1,12 +1,20 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/vibeswaf/waf/internal/config"
 	"github.com/vibeswaf/waf/internal/pipeline"
 	"github.com/vibeswaf/waf/internal/service"
 )
+
+type IPAccessEvidence struct {
+	MatchedRule string `json:"matched_rule"`
+	IPRange     string `json:"ip_range"`
+	Action      string `json:"action"`
+	Description string `json:"description"`
+}
 
 type IPAccessHandler struct {
 	ipAccessService *service.IPAccessService
@@ -56,15 +64,21 @@ func (h *IPAccessHandler) Handle(ctx *pipeline.Context) error {
 	ctx.SetExtra("matched_ip_rule_action", ipRule.Action)
 	ctx.SetExtra("matched_ip_rule_ip_range", ipRule.IPRange)
 
+	evidence := IPAccessEvidence{
+		MatchedRule: ipRule.Description,
+		IPRange:     ipRule.IPRange,
+		Action:      ipRule.Action,
+		Description: ipRule.Description,
+	}
+	evidenceJSON, _ := json.Marshal(evidence)
 	ctx.AddTrace(pipeline.StageTrace{
-		Stage:  "ip_access_rule",
-		Result: toResult(ipRule.Action),
-		RuleID: fmt.Sprintf("%d", ipRule.ID),
-		Reason: ipRule.Description,
+		Stage:    "ip_access_rule",
+		Result:   toResult(ipRule.Action),
+		RuleID:   fmt.Sprintf("%d", ipRule.ID),
+		Reason:   ipRule.Description,
+		Evidence: json.RawMessage(evidenceJSON),
 	})
 
-	// Mark as hard decision — Phase 2 scoring will be skipped.
-	// Allow is also a hard decision: "I trust this, fast-track to proxy."
 	ctx.HardDecision = true
 
 	h.appCfg.LogInfo("[IP_ACCESS] Terminal action set - bypassing subsequent security checks")

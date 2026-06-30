@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +19,18 @@ import (
 
 type protocolAnomalyState struct {
 	rules map[string]int
+}
+
+type ProtocolViolation struct {
+	Type   string `json:"type"`
+	Score  int    `json:"score"`
+	Detail string `json:"detail"`
+}
+
+type ProtocolEvidence struct {
+	Violations []ProtocolViolation `json:"violations"`
+	JA4        string `json:"ja4,omitempty"`
+	JA4H       string `json:"ja4h,omitempty"`
 }
 
 type ProtocolAnomalyHandler struct {
@@ -101,25 +116,36 @@ func (h *ProtocolAnomalyHandler) Handle(ctx *pipeline.Context) error {
 
 	var score int
 	var reasons []string
+	violations := make([]ProtocolViolation, 0)
 
-	headerScore, headerReasons := h.checkHeaderInconsistency(ctx)
+	headerScore, headerReasons, headerViolations := h.checkHeaderInconsistency(ctx)
 	score += headerScore
 	reasons = append(reasons, headerReasons...)
+	violations = append(violations, headerViolations...)
 
-	cookieScore, cookieReasons := h.checkCookieAnomaly(ctx)
+	cookieScore, cookieReasons, cookieViolations := h.checkCookieAnomaly(ctx)
 	score += cookieScore
 	reasons = append(reasons, cookieReasons...)
+	violations = append(violations, cookieViolations...)
 
-	ja4Score, ja4Reasons := h.checkJA4Anomaly(ctx)
+	ja4Score, ja4Reasons, ja4Violations := h.checkJA4Anomaly(ctx)
 	score += ja4Score
 	reasons = append(reasons, ja4Reasons...)
+	violations = append(violations, ja4Violations...)
 
 	if score > 0 {
 		h.appCfg.LogDebug("[PROTOCOL_ANOMALY] Contributed score=%d for ip=%s", score, ctx.ClientIP)
+		evidence := ProtocolEvidence{
+			Violations: violations,
+			JA4:        ctx.GetExtraString("ja4"),
+			JA4H:       ctx.GetExtraString("ja4h"),
+		}
+		evidenceJSON, _ := json.Marshal(evidence)
 		ctx.AddTrace(pipeline.StageTrace{
-			Stage:  "protocol_anomaly",
-			Score:  score,
-			Reason: joinReasons(reasons),
+			Stage:    "protocol_anomaly",
+			Score:    score,
+			Reason:   joinReasons(reasons),
+			Evidence: json.RawMessage(evidenceJSON),
 		})
 	} else {
 		ctx.AddTrace(pipeline.StageTrace{Stage: "protocol_anomaly", Score: 0})
@@ -128,22 +154,22 @@ func (h *ProtocolAnomalyHandler) Handle(ctx *pipeline.Context) error {
 	return nil
 }
 
-func (h *ProtocolAnomalyHandler) checkHeaderInconsistency(ctx *pipeline.Context) (int, []string) {
+func (h *ProtocolAnomalyHandler) checkHeaderInconsistency(ctx *pipeline.Context) (int, []string, []ProtocolViolation) {
 	r := ctx.Request
 	var score int
 	var reasons []string
+	violations := make([]ProtocolViolation, 0)
 
-	// HTTP/2 should not have Connection header
 	if r.ProtoMajor >= 2 && r.Header.Get("Connection") != "" {
 		s := h.ruleScore("http2_connection_header")
 		if s > 0 {
 			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "http2_connection_header", s)
 			score += s
 			reasons = append(reasons, "HTTP/2 Connection header")
+			violations = append(violations, ProtocolViolation{Type: "http2_connection_header", Score: s, Detail: "HTTP/2 with Connection header"})
 		}
 	}
 
-	// Content-Type on GET/HEAD request (no body expected)
 	method := strings.ToUpper(r.Method)
 	if (method == "GET" || method == "HEAD") && r.Header.Get("Content-Type") != "" {
 		s := h.ruleScore("content_type_no_body")
@@ -151,10 +177,10 @@ func (h *ProtocolAnomalyHandler) checkHeaderInconsistency(ctx *pipeline.Context)
 			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "content_type_no_body", s)
 			score += s
 			reasons = append(reasons, "Content-Type on bodyless request")
+			violations = append(violations, ProtocolViolation{Type: "content_type_no_body", Score: s, Detail: "Content-Type on GET/HEAD"})
 		}
 	}
 
-	// Accept: text/html but path is clearly an API/data endpoint
 	accept := r.Header.Get("Accept")
 	path := ctx.Normalized.Path
 	if accept != "" && strings.Contains(accept, "text/html") && !strings.Contains(accept, "*/*") {
@@ -164,11 +190,11 @@ func (h *ProtocolAnomalyHandler) checkHeaderInconsistency(ctx *pipeline.Context)
 				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "accept_path_mismatch", s)
 				score += s
 				reasons = append(reasons, "Accept/path mismatch")
+				violations = append(violations, ProtocolViolation{Type: "accept_path_mismatch", Score: s, Detail: "text/html on API path"})
 			}
 		}
 	}
 
-	// Sec-Fetch-Dest: document but path is asset/API
 	secFetchDest := r.Header.Get("Sec-Fetch-Dest")
 	if secFetchDest == "document" {
 		if isAssetOrAPIPath(path) {
@@ -177,11 +203,11 @@ func (h *ProtocolAnomalyHandler) checkHeaderInconsistency(ctx *pipeline.Context)
 				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "sec_fetch_dest_mismatch", s)
 				score += s
 				reasons = append(reasons, "Sec-Fetch-Dest mismatch")
+				violations = append(violations, ProtocolViolation{Type: "sec_fetch_dest_mismatch", Score: s, Detail: "Sec-Fetch-Dest: document on asset"})
 			}
 		}
 	}
 
-	// Upgrade-Insecure-Requests on non-navigate
 	if r.Header.Get("Upgrade-Insecure-Requests") == "1" {
 		secFetchMode := r.Header.Get("Sec-Fetch-Mode")
 		if secFetchMode != "" && secFetchMode != "navigate" {
@@ -190,39 +216,40 @@ func (h *ProtocolAnomalyHandler) checkHeaderInconsistency(ctx *pipeline.Context)
 				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "upgrade_non_navigate", s)
 				score += s
 				reasons = append(reasons, "Upgrade-Insecure-Requests non-navigate")
+				violations = append(violations, ProtocolViolation{Type: "upgrade_non_navigate", Score: s, Detail: "UIR on non-navigate request"})
 			}
 		}
 	}
 
-	// Transfer-Encoding and Content-Length both present (request smuggling indicator)
 	if r.Header.Get("Transfer-Encoding") != "" && r.Header.Get("Content-Length") != "" {
 		s := h.ruleScore("te_cl_conflict")
 		if s > 0 {
 			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "te_cl_conflict", s)
 			score += s
 			reasons = append(reasons, "TE/CL conflict")
+			violations = append(violations, ProtocolViolation{Type: "te_cl_conflict", Score: s, Detail: "Both TE and CL headers present"})
 		}
 	}
 
-	// Multiple Host headers (smuggling/spoofing)
 	if hosts := r.Header.Values("Host"); len(hosts) > 1 {
 		s := h.ruleScore("multiple_host_headers")
 		if s > 0 {
 			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "multiple_host_headers", s)
 			score += s
 			reasons = append(reasons, "Multiple Host headers")
+			violations = append(violations, ProtocolViolation{Type: "multiple_host_headers", Score: s, Detail: "Multiple Host headers"})
 		}
 	}
 
-	return score, reasons
+	return score, reasons, violations
 }
 
-func (h *ProtocolAnomalyHandler) checkCookieAnomaly(ctx *pipeline.Context) (int, []string) {
+func (h *ProtocolAnomalyHandler) checkCookieAnomaly(ctx *pipeline.Context) (int, []string, []ProtocolViolation) {
 	r := ctx.Request
 	var score int
 	var reasons []string
+	violations := make([]ProtocolViolation, 0)
 
-	// Check for invalid challenge cookie (present but HMAC doesn't match)
 	cookie, err := r.Cookie("ok")
 	if err == nil && cookie.Value != "" {
 		if !h.isValidChallengeFormat(cookie.Value) {
@@ -231,6 +258,7 @@ func (h *ProtocolAnomalyHandler) checkCookieAnomaly(ctx *pipeline.Context) (int,
 				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "malformed_challenge_cookie", s)
 				score += s
 				reasons = append(reasons, "Malformed challenge cookie")
+				violations = append(violations, ProtocolViolation{Type: "malformed_challenge_cookie", Score: s, Detail: "Invalid cookie format"})
 			}
 		} else if h.isCookieTimestampFuture(cookie.Value) {
 			s := h.ruleScore("future_cookie_timestamp")
@@ -238,11 +266,11 @@ func (h *ProtocolAnomalyHandler) checkCookieAnomaly(ctx *pipeline.Context) (int,
 				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "future_cookie_timestamp", s)
 				score += s
 				reasons = append(reasons, "Future cookie timestamp")
+				violations = append(violations, ProtocolViolation{Type: "future_cookie_timestamp", Score: s, Detail: "Cookie timestamp in future"})
 			}
 		}
 	}
 
-	// Suspicious: many cookies on a path that shouldn't have them
 	cookieHeader := r.Header.Get("Cookie")
 	if cookieHeader != "" {
 		cookieCount := strings.Count(cookieHeader, "=")
@@ -255,12 +283,13 @@ func (h *ProtocolAnomalyHandler) checkCookieAnomaly(ctx *pipeline.Context) (int,
 					ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "excessive_cookies_no_referer", s)
 					score += s
 					reasons = append(reasons, "Excessive cookies without referer")
+					violations = append(violations, ProtocolViolation{Type: "excessive_cookies_no_referer", Score: s, Detail: "Many cookies without referer"})
 				}
 			}
 		}
 	}
 
-	return score, reasons
+	return score, reasons, violations
 }
 
 func (h *ProtocolAnomalyHandler) isValidChallengeFormat(value string) bool {
@@ -285,15 +314,68 @@ func (h *ProtocolAnomalyHandler) isCookieTimestampFuture(value string) bool {
 	}
 	return timestamp > time.Now().Unix()+60
 }
-func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []string) {
+
+// compareUAFromJA4H extracts UA hash from JA4H and compares with actual UA hash
+// JA4H format: ja4h_[version]_[ua_hash]_[accept]_[accept_enc]_[accept_lang]
+// The UA hash is the second segment after "ja4h_"
+func (h *ProtocolAnomalyHandler) compareUAFromJA4H(ctx *pipeline.Context, ja4h, actualUA string) {
+	if ja4h == "" || actualUA == "" {
+		return
+	}
+
+	ja4hUAHash := extractUAHashFromJA4H(ja4h)
+	if ja4hUAHash == "" {
+		return
+	}
+
+	// Hash actual UA with same algorithm (SHA256 first 12 chars for JA4H format)
+	actualUAHash := hashUA(actualUA)
+
+	if actualUAHash == "" {
+		return
+	}
+
+	ctx.SetExtra("ja4h_ua_hash", ja4hUAHash)
+	ctx.SetExtra("actual_ua_hash", actualUAHash)
+	ctx.SetExtra("ua_match", ja4hUAHash == actualUAHash)
+}
+
+// extractUAHashFromJA4H parses JA4H to get UA hash component
+// Format: ja4h_version_ua_hash_accept_accept_enc_accept_lang
+// Example: ja4h_t13d1915h2_8b33c42f46a3_7d5c8e9f1a2b_...
+func extractUAHashFromJA4H(ja4h string) string {
+	if !strings.HasPrefix(ja4h, "ja4h_") {
+		return ""
+	}
+
+	parts := strings.Split(ja4h, "_")
+	// ja4h_[version]_[ua_hash]_[accept]_[accept_enc]_[accept_lang]
+	// Index:       0      1        2        3        4           5
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+	return ""
+}
+
+// hashUA creates hash of User-Agent for comparison with JA4H UA hash
+// Uses SHA256 and takes first 12 characters (same as JA4H format)
+func hashUA(ua string) string {
+	if ua == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(strings.ToLower(ua)))
+	return hex.EncodeToString(hash[:])[:12]
+}
+
+func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []string, []ProtocolViolation) {
 	r := ctx.Request
 	var score int
 	var reasons []string
+	violations := make([]ProtocolViolation, 0)
 
 	ja4 := r.Header.Get("X-JA4")
 	ja4h := r.Header.Get("X-JA4H")
 
-	// Store in metadata for logging/visibility
 	if ja4 != "" {
 		ctx.SetExtra("ja4", ja4)
 	}
@@ -301,21 +383,23 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 		ctx.SetExtra("ja4h", ja4h)
 	}
 
+	// Extract UA hash from JA4H and compare with actual UA
+	h.compareUAFromJA4H(ctx, ja4h, r.Header.Get("User-Agent"))
+
 	ua := strings.ToLower(ctx.Normalized.UA)
 	isBrowserUA := strings.Contains(ua, "mozilla") && (strings.Contains(ua, "chrome") || strings.Contains(ua, "safari") || strings.Contains(ua, "firefox"))
 	isBotUA := strings.Contains(ua, "bot") || strings.Contains(ua, "crawler") || strings.Contains(ua, "spider") || strings.Contains(ua, "curl") || strings.Contains(ua, "python") || strings.Contains(ua, "go-http")
 
-	// Rule 1: Browser UA + HTTP/1.0
 	if isBrowserUA && r.ProtoMajor == 1 && r.ProtoMinor == 0 {
 		s := h.ruleScore("browser_ua_http10")
 		if s > 0 {
 			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "browser_ua_http10", s)
 			score += s
 			reasons = append(reasons, "Browser UA with HTTP/1.0")
+			violations = append(violations, ProtocolViolation{Type: "browser_ua_http10", Score: s, Detail: "Browser UA with HTTP/1.0"})
 		}
 	}
 
-	// Rule 2: Browser UA + Old TLS (JA4 starts with t10 or t11)
 	if isBrowserUA && ja4 != "" && len(ja4) >= 3 {
 		tlsVer := ja4[1:3]
 		if tlsVer == "10" || tlsVer == "11" {
@@ -324,21 +408,21 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "ja4_old_tls_browser_ua", s)
 				score += s
 				reasons = append(reasons, "Old TLS with browser UA")
+				violations = append(violations, ProtocolViolation{Type: "ja4_old_tls_browser_ua", Score: s, Detail: "Old TLS version with browser UA"})
 			}
 		}
 	}
 
-	// Rule 3: Browser UA + JA4 Empty (HTTPS request but no JA4 — should not happen)
 	if isBrowserUA && ja4 == "" && r.TLS != nil {
 		s := h.ruleScore("browser_ua_ja4_empty")
 		if s > 0 {
 			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "browser_ua_ja4_empty", s)
 			score += s
 			reasons = append(reasons, "Missing JA4 on TLS browser request")
+			violations = append(violations, ProtocolViolation{Type: "browser_ua_ja4_empty", Score: s, Detail: "TLS request without JA4"})
 		}
 	}
 
-	// Rule 4: Bot UA + Browser-like JA4
 	if isBotUA && ja4 != "" && len(ja4) >= 7 {
 		if ja4[3] == 'd' {
 			cipherCountStr := ja4[4:6]
@@ -348,12 +432,12 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 					ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "bot_ua_browser_ja4", s)
 					score += s
 					reasons = append(reasons, "Bot UA with browser-like JA4")
+					violations = append(violations, ProtocolViolation{Type: "bot_ua_browser_ja4", Score: s, Detail: "Bot UA with browser-like TLS"})
 				}
 			}
 		}
 	}
 
-	// Rule 5: Browser UA + Simple/Bot JA4
 	if isBrowserUA && ja4 != "" && len(ja4) >= 7 {
 		if ja4[3] == 'd' {
 			cipherCountStr := ja4[4:6]
@@ -363,12 +447,13 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 					ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "browser_ua_simple_ja4", s)
 					score += s
 					reasons = append(reasons, "Browser UA with simple JA4")
+					violations = append(violations, ProtocolViolation{Type: "browser_ua_simple_ja4", Score: s, Detail: "Browser UA with minimal cipher count"})
 				}
 			}
 		}
 	}
 
-	return score, reasons
+	return score, reasons, violations
 }
 
 func isAPIPath(path string) bool {

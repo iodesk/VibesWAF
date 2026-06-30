@@ -75,6 +75,23 @@ func (p *Pipeline) Execute(ctx *Context) error {
 	ctx.Normalized = Normalize(ctx)
 	ctx.RiskScore = NewRiskScore()
 	ctx.Trace = NewPipelineTrace()
+	ctx.Trace.Request = &RequestMetadata{
+		IP:              ctx.ClientIP,
+		Method:          ctx.Request.Method,
+		Path:            ctx.Request.URL.Path,
+		Host:            ctx.Request.Host,
+		UserAgent:       ctx.Request.UserAgent(),
+		HTTPFingerprint: ctx.HTTPFingerprint,
+		JA4:             ctx.GetExtraString("ja4"),
+		JA4H:            ctx.GetExtraString("ja4h"),
+		JA4H_UA_Hash:    ctx.GetExtraString("ja4h_ua_hash"),
+		ActualUA_Hash:   ctx.GetExtraString("actual_ua_hash"),
+	}
+	if uaMatch, ok := ctx.GetExtra("ua_match"); ok {
+		if match, ok := uaMatch.(bool); ok {
+			ctx.Trace.Request.UA_Match = match
+		}
+	}
 	start := time.Now()
 
 	// Phase 1: Deterministic hard rules — early exit on block/challenge
@@ -155,6 +172,23 @@ func (p *Pipeline) ExecuteWebSocketChecks(ctx *Context) {
 	ctx.Normalized = Normalize(ctx)
 	ctx.RiskScore = NewRiskScore()
 	ctx.Trace = NewPipelineTrace()
+	ctx.Trace.Request = &RequestMetadata{
+		IP:              ctx.ClientIP,
+		Method:          ctx.Request.Method,
+		Path:            ctx.Request.URL.Path,
+		Host:            ctx.Request.Host,
+		UserAgent:       ctx.Request.UserAgent(),
+		HTTPFingerprint: ctx.HTTPFingerprint,
+		JA4:             ctx.GetExtraString("ja4"),
+		JA4H:            ctx.GetExtraString("ja4h"),
+		JA4H_UA_Hash:    ctx.GetExtraString("ja4h_ua_hash"),
+		ActualUA_Hash:   ctx.GetExtraString("actual_ua_hash"),
+	}
+	if uaMatch, ok := ctx.GetExtra("ua_match"); ok {
+		if match, ok := uaMatch.(bool); ok {
+			ctx.Trace.Request.UA_Match = match
+		}
+	}
 
 	// Run only Phase 1 handlers (IP rules, challenge validator, flood, rate limit)
 	// These are network-level checks that don't need request body.
