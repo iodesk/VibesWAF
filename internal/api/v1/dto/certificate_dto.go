@@ -27,6 +27,11 @@ type RenewCertificateRequest struct {
 	Domain string `json:"domain"`
 }
 
+type IssueCertificateRequest struct {
+	Domain string `json:"domain"`
+	AppID  string `json:"app_id,omitempty"`
+}
+
 type ToggleAutoRenewRequest struct {
 	Enabled bool `json:"enabled"`
 }

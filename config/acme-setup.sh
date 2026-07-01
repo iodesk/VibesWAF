@@ -1,14 +1,14 @@
 #!/bin/bash
-# ACME Setup Script - Install acme.sh as the 'wafer' user for SSL provisioning.
-# The wafer backend (systemd User=wafer) is what invokes acme.sh, so acme.sh
-# MUST be installed in the wafer user's home (/opt/wafer/.acme.sh), not /root.
+# ACME Setup Script - Install acme.sh as the 'vibeswaf' user for SSL provisioning.
+# The vibeswaf backend (systemd User=vibeswaf) is what invokes acme.sh, so acme.sh
+# MUST be installed in the vibeswaf user's home (/opt/vibeswaf/.acme.sh), not /root.
 # Usage: sudo ./acme-setup.sh
 
 set -e
 
 ACME_EMAIL="${ACME_EMAIL:-admin@domain.com}"
-ACME_USER="wafer"
-ACME_HOME="/opt/wafer"
+ACME_USER="vibeswaf"
+ACME_HOME="/opt/vibeswaf"
 CERT_DIR="/opt/certs"
 
 echo "=== ACME.sh Setup (user: $ACME_USER) ==="
@@ -20,19 +20,19 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# The wafer user must exist
+# The vibeswaf user must exist
 if ! id -u "$ACME_USER" > /dev/null 2>&1; then
     echo "✗ User '$ACME_USER' does not exist. Run deploy.sh first."
     exit 1
 fi
 
-# 1. Install acme.sh as the wafer user (home = /opt/wafer → /opt/wafer/.acme.sh).
+# 1. Install acme.sh as the vibeswaf user (home = /opt/vibeswaf → /opt/vibeswaf/.acme.sh).
 # The installer downloads master.tar.gz into the CWD, so run it from a temp dir
-# the wafer user owns. '-H' sets HOME from the wafer account (no manual HOME=).
+# the vibeswaf user owns. '-H' sets HOME from the vibeswaf account (no manual HOME=).
 if [ ! -f "$ACME_HOME/.acme.sh/acme.sh" ]; then
     echo "[1/3] Installing acme.sh as user $ACME_USER..."
 
-    # Make sure the home dir exists and is owned by wafer.
+    # Make sure the home dir exists and is owned by vibeswaf.
     mkdir -p "$ACME_HOME"
     chown "$ACME_USER":"$ACME_USER" "$ACME_HOME"
 
@@ -51,13 +51,13 @@ else
     echo "[1/3] acme.sh already installed at $ACME_HOME/.acme.sh"
 fi
 
-# 2. Set default CA to Let's Encrypt (as the wafer user)
+# 2. Set default CA to Let's Encrypt (as the vibeswaf user)
 echo "[2/3] Setting default CA..."
 sudo -u "$ACME_USER" -H HOME="$ACME_HOME" \
     "$ACME_HOME/.acme.sh/acme.sh" --set-default-ca --server letsencrypt
 echo "✓ Default CA set to Let's Encrypt"
 
-# 3. Prepare certificate directory (group 'cert' so wafer + openresty can access)
+# 3. Prepare certificate directory (group 'cert' so vibeswaf + openresty can access)
 echo "[3/3] Preparing certificate directory..."
 mkdir -p "$CERT_DIR"
 getent group cert > /dev/null 2>&1 || groupadd cert
@@ -75,7 +75,7 @@ echo ""
 echo "Note: OpenResty loads certificates dynamically via ssl.lua (cached with TTL),"
 echo "so NO service reload is needed when issuing/renewing certificates."
 echo ""
-echo "Issue a certificate manually (as the wafer user):"
+echo "Issue a certificate manually (as the vibeswaf user):"
 echo "  sudo -u $ACME_USER -H HOME=$ACME_HOME $ACME_HOME/.acme.sh/acme.sh \\"
 echo "    --issue -d example.com --standalone --httpport 8080"
 echo ""

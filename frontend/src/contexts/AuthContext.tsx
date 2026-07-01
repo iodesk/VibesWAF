@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiBase } from '@/lib/api-client';
 
 interface User {
   id: number;
@@ -32,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkSetup = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/setup`, {
+      const response = await fetch(`${apiBase}/api/v1/auth/setup`, {
         credentials: 'include',
       });
       if (response.ok) {
@@ -54,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/me`, {
+      const response = await fetch(`${apiBase}/api/v1/auth/me`, {
         credentials: 'include',
       });
 
@@ -73,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (username: string, password: string) => {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/login`, {
+    const response = await fetch(`${apiBase}/api/v1/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/logout`, {
+      await fetch(`${apiBase}/api/v1/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });

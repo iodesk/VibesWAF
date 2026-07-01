@@ -1,14 +1,14 @@
 #!/bin/bash
-# Issue an SSL certificate for a domain (as the 'wafer' user).
-# acme.sh is installed at /opt/wafer/.acme.sh, so this runs as the wafer user
+# Issue an SSL certificate for a domain (as the 'vibeswaf' user).
+# acme.sh is installed at /opt/vibeswaf/.acme.sh, so this runs as the vibeswaf user
 # to stay consistent with the backend.
 # Usage: sudo ./acme-issue.sh example.com
 
 set -e
 
 DOMAIN=$1
-ACME_USER="wafer"
-ACME_HOME="/opt/wafer"
+ACME_USER="vibeswaf"
+ACME_HOME="/opt/vibeswaf"
 ACME_SH="$ACME_HOME/.acme.sh/acme.sh"
 CERT_DIR="/opt/certs"
 

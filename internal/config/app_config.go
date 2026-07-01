@@ -16,7 +16,7 @@ const (
 	maxLogBackups = 3
 )
 
-const Version = "1.0.3"
+const Version = "1.0.4"
 
 type AppConfig struct {
 	Debug                  bool
@@ -28,6 +28,15 @@ type AppConfig struct {
 	logPath                string
 	logSize                int64
 	mu                     sync.RWMutex
+
+	// Demo mode configuration
+	DemoMode      bool
+	DemoDomain    string // immortal domain, never deleted on reset
+	ResetIntervalH int   // 0 = disabled, >0 = reset every N hours
+
+	// Dashboard host — requests with this Host header are served the embedded UI.
+	// Example: panel.vibeswaf.com
+	DashboardHost string
 
 	// debugFlag mirrors Debug for lock-free reads on the hot path.
 	// LogDebug is called dozens of times per request; reading it via the
@@ -52,6 +61,10 @@ func GetAppConfig() *AppConfig {
 		appConfig.initLogger()
 		appConfig.RetentionDays = parsePositiveInt("CLICKHOUSE_RETENTION_DAYS", 30)
 		appConfig.RetentionIntervalHours = parsePositiveInt("CLICKHOUSE_RETENTION_INTERVAL_HOURS", 24)
+		appConfig.DemoMode = getEnvBool("DEMO", false)
+		appConfig.DemoDomain = getEnvOrDefault("DEMO_DOMAIN_IMO", "def.demo.tailgo.com")
+		appConfig.ResetIntervalH = parseNonNegativeInt("DEMO_AUTO_DEL", 0)
+		appConfig.DashboardHost = getEnvOrDefault("DASHBOARD_HOST", "")
 	})
 	return appConfig
 }
@@ -221,6 +234,21 @@ func parsePositiveInt(key string, defaultVal int) int {
 	}
 	n, err := strconv.Atoi(val)
 	if err != nil || n <= 0 {
+		if appConfig != nil {
+			appConfig.LogWarn("[Config] invalid value for %s: %q, using default %d", key, val, defaultVal)
+		}
+		return defaultVal
+	}
+	return n
+}
+
+func parseNonNegativeInt(key string, defaultVal int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil || n < 0 {
 		if appConfig != nil {
 			appConfig.LogWarn("[Config] invalid value for %s: %q, using default %d", key, val, defaultVal)
 		}

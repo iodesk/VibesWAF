@@ -424,3 +424,9 @@ func (r *CertificateRepository) GetLogsByDomain(domain string, limit int) ([]*mo
 
 	return logs, nil
 }
+
+func (r *CertificateRepository) DeleteAllExcept(keepDomain string) error {
+	query := `DELETE FROM certificates WHERE app_id NOT IN (SELECT app_id FROM applications WHERE domain = $1)`
+	_, err := r.db.Exec(query, keepDomain)
+	return err
+}

@@ -47,6 +47,8 @@ type Router struct {
 	challengeStore       *challenge.Store
 	challengeRegistry    *challenge.Registry
 	logger               *logger.Clickhouse
+	uiHandler            http.Handler
+	dashboardHost        string // e.g. "panel.vibeswaf.com"
 }
 
 func NewRouter(
@@ -73,6 +75,8 @@ func NewRouter(
 	floodProtector *ratelimit.FloodProtector,
 	trustedHistory *handlers.TrustedHistoryScorer,
 	settingsCache *service.SettingsCache,
+	uiHandler http.Handler,
+	dashboardHost string,
 ) *Router {
 	return &Router{
 		ruleHandler:         handler.NewRuleHandler(ruleService, logger),
@@ -97,6 +101,8 @@ func NewRouter(
 		challengeStore:      challengeStore,
 		challengeRegistry:   challengeRegistry,
 		logger:              logger,
+		uiHandler:           uiHandler,
+		dashboardHost:       dashboardHost,
 	}
 }
 
@@ -122,17 +128,38 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
-		rt.setDashboardCORS(w, r)
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
+	// API and dashboard UI are only served on the dashboard host (or loopback).
+	// Any other host goes straight to the WAF pipeline.
+	if rt.isDashboardRequest(r) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			rt.rateLimitMiddleware.Limit(rt.handleAPIRoutes)(w, r)
 			return
 		}
-		rt.rateLimitMiddleware.Limit(rt.handleAPIRoutes)(w, r)
+		rt.uiHandler.ServeHTTP(w, r)
 		return
 	}
 
 	rt.wafHandler.ServeHTTP(w, r)
+}
+
+// isDashboardRequest returns true when the request is destined for the dashboard UI.
+// Matches the configured DASHBOARD_HOST subdomain, or loopback for direct access.
+func (rt *Router) isDashboardRequest(r *http.Request) bool {
+	host := r.Host
+	if i := strings.LastIndex(host, ":"); i != -1 {
+		host = host[:i]
+	}
+	// Loopback — direct access without nginx (dev / SSH tunnel)
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "":
+		return true
+	}
+	// Configured dashboard subdomain
+	return rt.dashboardHost != "" && host == rt.dashboardHost
 }
 
 func (rt *Router) handleAPIRoutes(w http.ResponseWriter, r *http.Request) {
@@ -663,6 +690,11 @@ func (rt *Router) handleCertificateRoutes(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if path == "/api/v1/certificates" && r.Method == http.MethodPost {
+		rt.certificateHandler.IssueCertificate(w, r)
+		return
+	}
+
 	if path == "/api/v1/certificates/sync" && r.Method == http.MethodPost {
 		rt.certificateHandler.SyncFromFilesystem(w, r)
 		return
@@ -887,32 +919,4 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return val
 	}
 	return defaultValue
-}
-
-func (rt *Router) setDashboardCORS(w http.ResponseWriter, r *http.Request) {
-	allowedOrigins := strings.Split(getEnvOrDefault("CORS_ALLOW_ORIGIN", "*"), ",")
-	requestOrigin := r.Header.Get("Origin")
-
-	originAllowed := false
-	for _, origin := range allowedOrigins {
-		trimmedOrigin := strings.TrimSpace(origin)
-		if trimmedOrigin == "*" || trimmedOrigin == requestOrigin {
-			if trimmedOrigin == "*" {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else {
-				w.Header().Set("Access-Control-Allow-Origin", requestOrigin)
-			}
-			originAllowed = true
-			break
-		}
-	}
-
-	if !originAllowed && len(allowedOrigins) > 0 {
-		w.Header().Set("Access-Control-Allow-Origin", strings.TrimSpace(allowedOrigins[0]))
-	}
-
-	w.Header().Set("Access-Control-Allow-Methods", getEnvOrDefault("CORS_ALLOW_METHODS", "GET, POST, PUT, DELETE, OPTIONS"))
-	w.Header().Set("Access-Control-Allow-Headers", getEnvOrDefault("CORS_ALLOW_HEADERS", "Content-Type, Authorization, Cookie"))
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Max-Age", getEnvOrDefault("CORS_MAX_AGE", "3600"))
 }

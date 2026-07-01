@@ -20,6 +20,21 @@ export const useSSLActions = () => {
     }
   };
 
+  const issueCertificate = async (domain: string, appId?: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      return await wafApi.certificates.issue(domain, appId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const validateCertificate = async (domain: string) => {
     try {
       setLoading(true);
@@ -96,6 +111,7 @@ export const useSSLActions = () => {
   };
 
   return {
+    issueCertificate,
     renewCertificate,
     validateCertificate,
     toggleAutoRenew,

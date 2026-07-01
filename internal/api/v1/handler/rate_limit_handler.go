@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/vibeswaf/waf/internal/api/v1/dto"
+	appcfg "github.com/vibeswaf/waf/internal/config"
 	"github.com/vibeswaf/waf/internal/logger"
 	"github.com/vibeswaf/waf/internal/model"
 	"github.com/vibeswaf/waf/internal/repository"
@@ -47,6 +48,11 @@ func (h *RateLimitHandler) GetRateLimitConfig(w http.ResponseWriter, r *http.Req
 
 
 func (h *RateLimitHandler) UpdateRateLimitConfig(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req dto.RateLimitUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")

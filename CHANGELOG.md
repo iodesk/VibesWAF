@@ -1,6 +1,63 @@
 # Changelog
 
 
+## [1.0.4] - 2026-07-01
+
+### Security
+
+- SSL renew now forces re-issue via `--force` flag; previously `IssueAsync` skipped renewal if cert files existed on disk. (`internal/acme/service.go`, `internal/service/certificate_service.go`)
+
+### Changed
+
+- Added `POST /api/v1/certificates` endpoint to issue SSL certificates for new domains manually from the dashboard. (`internal/api/v1/handler/certificate_handler.go`, `internal/api/v1/router.go`, `internal/service/certificate_service.go`, `internal/api/v1/dto/certificate_dto.go`)
+- SSL Manager: added "Add Domain" button that opens a dialog to issue a new Let's Encrypt certificate via acme.sh. (`frontend/src/pages/security/SSLManager.tsx`, `frontend/src/hooks/ssl/useSSLActions.ts`, `frontend/src/lib/api/client.ts`)
+- ACME worker now serial (queue-based) so port 8080 is never contended; multiple renew/issue requests queue instead of erroring. (`internal/acme/service.go`)
+- SSL auto-poll: frontend polls every 5s while any certificate is pending, stops after all resolved. (`frontend/src/hooks/ssl/useSSLCertificates.ts`)
+- Bulk renew: "Renew Selected" button when certificates are selected in table. (`frontend/src/components/ssl/CertificateTable.tsx`)
+
+### Internal
+
+- Added `RenewAsync` method to `acme.Service` that calls `--issue --force`; `IssueAsync` retains original skip-if-exists behavior for auto-provisioning. (`internal/acme/service.go`)
+- Added `IssueDomain(domain, appID)` to `CertificateService` creating a pending DB record then async-issuing. (`internal/service/certificate_service.go`)
+- Added `IssueCertificateRequest` DTO. (`internal/api/v1/dto/certificate_dto.go`)
+- Added `certificates.issue` to API client. (`frontend/src/lib/api/client.ts`)
+- Certificate status auto-updated after async issue/renew via onComplete callback. (`internal/acme/service.go`, `internal/service/certificate_service.go`)
+- Fixed `toCertificateInfo` marking pending certs as `IsExpiringSoon`. (`internal/service/certificate_service.go`)
+- Fixed `CertificateDetailsDialog` using manual overlay instead of `DialogContent` component. (`frontend/src/components/ssl/CertificateDetailsDialog.tsx`)
+- `const Version = "1.0.4"` in `internal/config/app_config.go`.
+
+### Performance
+
+- ACME serial worker avoids port 8080 contention; queue-based dedup prevents duplicate work. (`internal/acme/service.go`)
+
+---
+
+### Changed
+
+- API `/api/v1/*` restricted to dashboard host only; requests from WAF-proxied domains go to WAF pipeline. CORS headers removed, no longer needed. (`internal/api/v1/router.go`)
+- Removed `CORS_ALLOW_ORIGIN`, `CORS_ALLOW_METHODS`, `CORS_ALLOW_HEADERS`, `CORS_MAX_AGE` env vars. (`.env.example`, `.env`)
+- Added demo mode: `DEMO=true` enables a shared demo instance where global config (bot, WAF, scoring, rate limit, protocol anomaly, IP reputation, certificates) is locked with a `403 Restrict Demo Only` response on any write attempt. (`internal/api/v1/handler/`)
+- Demo mode exposes `demo` flag in `/health` response; frontend shows an amber banner when active. (`internal/api/v1/handler/health_handler.go`, `frontend/src/contexts/DemoContext.tsx`, `frontend/src/App.tsx`)
+- Per-app config (domain, security rules, advanced settings, IP access rules) remains fully editable in demo mode.
+- Auto-reset cron deletes all non-immortal apps and certificates on a configurable interval (`DEMO_AUTO_DEL` hours, 0 = disabled). Immortal domain set via `DEMO_DOMAIN_IMO`. ClickHouse analytics are never deleted. (`internal/service/demo_service.go`)
+- First run seeds the immortal demo domain with a default app config if it does not exist. (`internal/service/demo_service.go`)
+- All frontend API calls now use `apiBase` from `src/lib/api/client.ts` as single source of truth; removed inline `VITE_API_BASE_URL` fallbacks across 7 files. (`src/lib/api/client.ts`, `src/hooks/*`, `src/contexts/AuthContext.tsx`, `src/pages/auth/Setup.tsx`, `src/lib/field-metadata.ts`)
+
+### Internal
+
+- Embed frontend `dist/` into Go binary via `ui.go` at root; `//go:embed frontend/dist` reads build output directly without a copy step. (`ui.go`, `internal/api/v1/router.go`)
+- Dashboard subdomain routing via `DASHBOARD_HOST` env var; loopback access always works as fallback. (`internal/api/v1/router.go`, `internal/config/app_config.go`)
+- `deploy.sh` builds frontend with `VITE_API_BASE_URL=""` then `go build` embeds it directly. (`config/deploy.sh`)
+- `frontend/dist/` excluded from git; embedded at compile time from source tree. (`.gitignore`)
+- Added `DEMO`, `DEMO_DOMAIN_IMO`, `DEMO_AUTO_DEL` env vars to `.env` and `.env.example`.
+- Added `DemoMode`, `DemoDomain`, `ResetIntervalH` fields to `AppConfig`; added `parseNonNegativeInt` helper. (`internal/config/app_config.go`)
+- Added `DemoService` with scheduler goroutine and `DeleteAllExcept` repo methods. (`internal/service/demo_service.go`, `internal/repository/app_repository.go`, `internal/repository/certificate_repository.go`)
+- Added `SettingsRepository.Update` generic key-value write for `last_demo_reset` tracking. (`internal/repository/settings_repository.go`)
+- Added `DefaultAppConfig()` to `internal/domain/app/app.go` for seeding.
+- `const Version = "1.0.4"` in `internal/config/app_config.go`.
+
+---
+
 ## [1.0.3] - 2026-06-30
 
 ### Changed

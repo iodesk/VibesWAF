@@ -28,12 +28,18 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
       await renewCertificate(domain);
       if (onUpdate) {
         onUpdate(domain, { last_renew_status: 'pending' });
-      } else {
-        onRefresh();
       }
     } catch (err) {
       console.error('Renew failed:', err);
     }
+  };
+
+  const handleBulkRenew = async () => {
+    const domains = Array.from(selectedDomains);
+    for (const domain of domains) {
+      await handleRenew(domain);
+    }
+    onRefresh?.();
   };
 
   const handleToggleAutoRenew = async (domain: string, enabled: boolean) => {
@@ -146,15 +152,26 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
           <span className="text-sm font-medium">
             {selectedDomains.size} certificate(s) selected
           </span>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => setBulkDeleteOpen(true)}
-            disabled={loading}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Delete Selected
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkRenew}
+              disabled={loading}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Renew Selected
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setBulkDeleteOpen(true)}
+              disabled={loading}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Selected
+            </Button>
+          </div>
         </div>
       )}
 

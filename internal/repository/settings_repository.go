@@ -200,9 +200,23 @@ func (r *SettingsRepository) UpdateIPReputationConfig(config model.IPReputationC
 	}
 
 	_, err = r.db.Exec(`
-		INSERT INTO settings (key, value, updated_at) 
+		INSERT INTO settings (key, value, updated_at)
 		VALUES ('ip_reputation_config', $1, NOW())
 		ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
 	`, val)
+	return err
+}
+
+func (r *SettingsRepository) Update(key string, value interface{}) error {
+	val, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.Exec(`
+		INSERT INTO settings (key, value, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+	`, key, val)
 	return err
 }

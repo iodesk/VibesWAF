@@ -12,9 +12,9 @@ const THEME_STORAGE_KEY = 'vibeswaf-theme';
 function getStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === 'dark' ? 'dark' : 'light';
+    return stored === 'dark' || stored === 'light' ? stored : 'dark';
   } catch {
-    return 'light';
+    return 'dark';
   }
 }
 

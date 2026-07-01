@@ -2,16 +2,20 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CertificateTable } from '@/components/ssl/CertificateTable';
 import { useSSLCertificates } from '@/hooks/ssl/useSSLCertificates';
 import { useSSLActions } from '@/hooks/ssl/useSSLActions';
-import { RefreshCw, Search, AlertTriangle, CheckCircle, Download } from 'lucide-react';
+import { RefreshCw, Search, AlertTriangle, CheckCircle, Download, Plus } from 'lucide-react';
 import { SkeletonPage } from '@/components/shared/SkeletonLoading';
 
 const SSLManager = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [newDomain, setNewDomain] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
   const { certificates, loading, error, refetch, removeCertificates, updateCertificate } = useSSLCertificates();
-  const { syncFromFilesystem, loading: syncing } = useSSLActions();
+  const { syncFromFilesystem, issueCertificate, loading: actionsLoading } = useSSLActions();
 
   const filteredCertificates = certificates.filter((cert) =>
     cert.domain.toLowerCase().includes(searchQuery.toLowerCase())
@@ -27,6 +31,23 @@ const SSLManager = () => {
       refetch();
     } catch (err) {
       console.error('Sync failed:', err);
+    }
+  };
+
+  const handleAddDomain = async () => {
+    const domain = newDomain.trim();
+    if (!domain) {
+      setAddError('Domain is required');
+      return;
+    }
+    setAddError(null);
+    try {
+      await issueCertificate(domain);
+      setAddOpen(false);
+      setNewDomain('');
+      refetch();
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Failed to issue certificate');
     }
   };
 
@@ -66,9 +87,13 @@ const SSLManager = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleSync} variant="outline" disabled={syncing} className="flex-1 md:flex-none">
+            <Button onClick={() => setAddOpen(true)} className="flex-1 md:flex-none">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Domain
+            </Button>
+            <Button onClick={handleSync} variant="outline" disabled={actionsLoading} className="flex-1 md:flex-none">
               <Download className="w-4 h-4 mr-2" />
-              {syncing ? 'Syncing...' : 'Sync'}
+              {actionsLoading ? 'Syncing...' : 'Sync'}
             </Button>
             <Button onClick={refetch} variant="outline" className="flex-1 md:flex-none">
               <RefreshCw className="w-4 h-4 mr-2" />
@@ -146,6 +171,38 @@ const SSLManager = () => {
           onUpdate={updateCertificate}
         />
       </Card>
+
+      <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) { setNewDomain(''); setAddError(null); } }}>
+        <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="px-6 py-5 bg-muted border-b border-border">
+            <DialogTitle className="text-lg font-bold">Add SSL Domain</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 py-6 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Domain</label>
+              <Input
+                placeholder="example.com"
+                value={newDomain}
+                onChange={(e) => { setNewDomain(e.target.value); setAddError(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddDomain(); }}
+                disabled={actionsLoading}
+              />
+              {addError && <p className="text-xs text-destructive">{addError}</p>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              acme.sh will issue a Let's Encrypt certificate via standalone HTTP challenge on port 8080. Make sure the domain points to this server and port 8080 is accessible.
+            </p>
+          </div>
+          <DialogFooter className="px-6 py-4 bg-muted/30 border-t border-border">
+            <Button variant="ghost" className="font-bold text-muted-foreground" onClick={() => setAddOpen(false)} disabled={actionsLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddDomain} disabled={actionsLoading || !newDomain.trim()} className="px-6 font-bold">
+              {actionsLoading ? 'Issuing...' : 'Issue Certificate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

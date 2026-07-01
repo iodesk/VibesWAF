@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	appcfg "github.com/vibeswaf/waf/internal/config"
 	"github.com/vibeswaf/waf/internal/model"
 	"github.com/vibeswaf/waf/internal/repository"
 	"github.com/vibeswaf/waf/internal/service"
@@ -59,6 +60,11 @@ func (h *BotIPRangeHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotIPRangeHandler) Create(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req createBotIPRangeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -111,6 +117,11 @@ func (h *BotIPRangeHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotIPRangeHandler) Update(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 5 {
 		respondError(w, http.StatusBadRequest, "Invalid ID")
@@ -161,6 +172,11 @@ func (h *BotIPRangeHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotIPRangeHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 5 {
 		respondError(w, http.StatusBadRequest, "Invalid ID")

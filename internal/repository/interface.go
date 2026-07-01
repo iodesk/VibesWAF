@@ -30,6 +30,7 @@ type AppRepository interface {
 	GetByDomain(domain string) (*app.App, error)
 	ListAll() ([]*app.App, error)
 	ToggleUnderAttackMode(appID string, enabled bool) error
+	DeleteAllExcept(keepDomain string) error
 }
 
 

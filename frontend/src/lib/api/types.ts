@@ -233,6 +233,8 @@ export interface SuccessResponse {
 
 export interface HealthResponse {
   status: string;
+  demo?: boolean;
+  version?: string;
 }
 
 export interface RateLimitConfig {

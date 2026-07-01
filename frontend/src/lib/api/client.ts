@@ -48,10 +48,15 @@ export class ApiError extends Error {
   }
 }
 
+// Single source of truth for the API base URL.
+// Empty string = same-origin (production embedded mode).
+// Set VITE_API_BASE_URL in .env for development.
+export const apiBase: string = import.meta.env.VITE_API_BASE_URL ?? '';
+
 class ApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3044') {
+  constructor(baseUrl: string = apiBase) {
     this.baseUrl = baseUrl;
   }
 
@@ -510,6 +515,13 @@ class ApiClient {
 
     get: (domain: string): Promise<Certificate> => {
       return this.request<Certificate>(`/api/v1/certificates/${domain}`);
+    },
+
+    issue: (domain: string, appId?: string): Promise<SuccessResponse> => {
+      return this.request<SuccessResponse>('/api/v1/certificates', {
+        method: 'POST',
+        body: JSON.stringify({ domain, app_id: appId ?? '' }),
+      });
     },
 
     renew: (domain: string): Promise<SuccessResponse> => {

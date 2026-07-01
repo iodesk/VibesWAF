@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiBase } from '@/lib/api-client';
 
 export interface PerformanceStats {
   p50_latency_ms: number;
@@ -21,8 +22,7 @@ export function usePerformanceStats() {
   return useQuery<PerformanceStats>({
     queryKey: ['performance-stats'],
     queryFn: async () => {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3044';
-      const response = await fetch(`${baseUrl}/api/v1/performance/stats`, {
+      const response = await fetch(`${apiBase}/api/v1/performance/stats`, {
         credentials: 'include',
       });
       return response.json();

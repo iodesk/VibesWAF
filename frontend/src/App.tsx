@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
+import { DemoProvider, useDemo } from './contexts/DemoContext'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 
 const Dashboard    = lazy(() => import('./pages/dashboard/Dashboard'))
@@ -148,34 +149,43 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 function PageHeader() {
   const location = useLocation()
   const { user } = useAuth()
+  const { isDemoMode } = useDemo()
 
   const allItems = navGroups.flatMap(g => g.items)
   const current = allItems.find(i => i.href === location.pathname)
   const pageTitle = current?.name ?? 'Dashboard'
 
   return (
-    <header className="h-14 border-b border-border bg-card/95 backdrop-blur-sm flex items-center px-6 gap-4 shrink-0">
-      <div className="flex-1 min-w-0">
-        <h1 className="text-[14px] font-semibold text-foreground truncate">{pageTitle}</h1>
-      </div>
-      <div className="flex items-center gap-2">
-        <ThemeToggleButton />
-        <button
-          aria-label="Notifications"
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Bell className="w-4 h-4" />
-        </button>
-        {user && (
-          <div className="flex items-center gap-2 pl-2 border-l border-border">
-            <div className="w-7 h-7 rounded-full btn-primary/10 flex items-center justify-center">
-              <span className="text-[11px] font-bold text-primary uppercase">
-                {user.username.charAt(0)}
-              </span>
+    <header className="border-b border-border bg-card/95 backdrop-blur-sm shrink-0">
+      {isDemoMode && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-1.5 flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Demo Mode</span>
+          <span className="text-[11px] text-amber-600/80 dark:text-amber-400/80">Global config is read-only. Per-app settings are fully editable.</span>
+        </div>
+      )}
+      <div className="h-14 flex items-center px-6 gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-[14px] font-semibold text-foreground truncate">{pageTitle}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggleButton />
+          <button
+            aria-label="Notifications"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Bell className="w-4 h-4" />
+          </button>
+          {user && (
+            <div className="flex items-center gap-2 pl-2 border-l border-border">
+              <div className="w-7 h-7 rounded-full btn-primary/10 flex items-center justify-center">
+                <span className="text-[11px] font-bold text-primary uppercase">
+                  {user.username.charAt(0)}
+                </span>
+              </div>
+              <span className="text-[12px] font-medium text-foreground hidden sm:block">{user.username}</span>
             </div>
-            <span className="text-[12px] font-medium text-foreground hidden sm:block">{user.username}</span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   )
@@ -277,7 +287,9 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <AppContent />
+        <DemoProvider>
+          <AppContent />
+        </DemoProvider>
       </ThemeProvider>
     </AuthProvider>
   )

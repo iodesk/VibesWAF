@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiBase } from '@/lib/api-client'
 
 export interface HistoryPoint {
   time: string
@@ -25,8 +26,7 @@ export function useCacheStats() {
   return useQuery<CacheStats>({
     queryKey: ['cache-stats'],
     queryFn: async () => {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3044'
-      const res = await fetch(`${baseUrl}/api/v1/cache/stats`, {
+      const res = await fetch(`${apiBase}/api/v1/cache/stats`, {
         credentials: 'include',
       })
       return res.json()

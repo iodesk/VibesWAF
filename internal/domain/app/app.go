@@ -378,3 +378,39 @@ func StreamPortMax() int {
 	}
 	return 19999
 }
+func DefaultAppConfig() AppConfig {
+	return AppConfig{
+		LBMethod: "round-robin",
+		Upstreams: []Upstream{
+			{
+				Scheme:  "http",
+				Host:    "localhost",
+				Port:    8080,
+				Weight:  1,
+				Enabled: true,
+			},
+		},
+		HealthCheck: HealthCheckConfig{
+			Enabled:   false,
+			Path:      "/health",
+			Interval:  30,
+			Threshold: 3,
+		},
+		Advanced: AdvancedConfig{
+			ConnectTimeout: 30,
+			ReadTimeout:    60,
+			SendTimeout:    60,
+			ProxyBuffering: true,
+			CORS: CORSConfig{
+				Enabled:      false,
+				AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+				AllowHeaders: []string{"Content-Type", "Authorization"},
+				MaxAge:       3600,
+			},
+			Cache: CacheConfig{
+				Enabled: false,
+				TTL:     300,
+			},
+		},
+	}
+}

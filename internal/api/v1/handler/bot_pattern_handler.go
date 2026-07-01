@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vibeswaf/waf/internal/api/v1/dto"
+	cfg "github.com/vibeswaf/waf/internal/config"
 	"github.com/vibeswaf/waf/internal/model"
 	"github.com/vibeswaf/waf/internal/repository"
 )
@@ -47,6 +48,11 @@ func (h *BotPatternHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotPatternHandler) Create(w http.ResponseWriter, r *http.Request) {
+	if cfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req dto.CreateBotPatternRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -102,6 +108,11 @@ func (h *BotPatternHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotPatternHandler) Update(w http.ResponseWriter, r *http.Request) {
+	if cfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 5 {
 		respondError(w, http.StatusBadRequest, "Invalid URL")
@@ -168,6 +179,11 @@ func (h *BotPatternHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotPatternHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if cfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 5 {
 		respondError(w, http.StatusBadRequest, "Invalid URL")
@@ -189,6 +205,10 @@ func (h *BotPatternHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BotPatternHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	if cfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
 	var req struct {
 		IDs []int `json:"ids"`
 	}

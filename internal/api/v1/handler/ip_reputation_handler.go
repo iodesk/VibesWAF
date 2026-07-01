@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vibeswaf/waf/internal/api/v1/dto"
+	appcfg "github.com/vibeswaf/waf/internal/config"
 	"github.com/vibeswaf/waf/internal/model"
 	"github.com/vibeswaf/waf/internal/service"
 )
@@ -48,6 +49,11 @@ func (h *IPReputationHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IPReputationHandler) Create(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req dto.CreateIPReputationEntryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -147,6 +153,11 @@ func (h *IPReputationHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IPReputationHandler) Update(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 5 {
 		respondError(w, http.StatusBadRequest, "Invalid URL")
@@ -195,6 +206,11 @@ func (h *IPReputationHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IPReputationHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 5 {
 		respondError(w, http.StatusBadRequest, "Invalid URL")
@@ -216,6 +232,11 @@ func (h *IPReputationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *IPReputationHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req struct {
 		IDs []int `json:"ids"`
 	}
@@ -246,6 +267,11 @@ func (h *IPReputationHandler) BulkDelete(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *IPReputationHandler) BulkUpdateScore(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req struct {
 		IDs   []int `json:"ids"`
 		Score int   `json:"score"`
@@ -296,6 +322,11 @@ func (h *IPReputationHandler) GetConfig(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *IPReputationHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req dto.UpdateIPReputationConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request payload")
@@ -340,6 +371,11 @@ func (h *IPReputationHandler) UpdateConfig(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *IPReputationHandler) SyncSpamhaus(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	totalIPs, totalASNs, fetchErrors, err := h.service.SyncSpamhaus()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to sync Spamhaus: "+err.Error())

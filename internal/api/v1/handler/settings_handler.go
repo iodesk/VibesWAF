@@ -37,6 +37,11 @@ func (h *SettingsHandler) GetBotConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SettingsHandler) UpdateBotConfig(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var config model.BotConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -68,6 +73,11 @@ func (h *SettingsHandler) GetWAFConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SettingsHandler) UpdateWAFConfig(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var config model.WAFConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -109,6 +119,11 @@ func (h *SettingsHandler) GetScoringConfig(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *SettingsHandler) UpdateScoringConfig(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var config model.ScoringConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")
@@ -144,6 +159,11 @@ func (h *SettingsHandler) GetProtocolAnomalyConfig(w http.ResponseWriter, r *htt
 }
 
 func (h *SettingsHandler) UpdateProtocolAnomalyConfig(w http.ResponseWriter, r *http.Request) {
+	if appcfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var config model.ProtocolAnomalyConfig
 	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")

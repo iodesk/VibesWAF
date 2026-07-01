@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { wafApi } from '@/lib/api-client';
+import { wafApi, apiBase } from '@/lib/api-client';
 import type { RuleCreateRequest, RuleUpdateRequest, Rule } from '@/lib/api-client';
 
 export function useRules() {
@@ -104,8 +104,7 @@ export function useRuleEvents(days: number = 30) {
   return useQuery({
     queryKey: ['ruleEvents', days],
     queryFn: async () => {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3044';
-      const response = await fetch(`${baseUrl}/api/v1/rules/events?days=${days}`, {
+      const response = await fetch(`${apiBase}/api/v1/rules/events?days=${days}`, {
         credentials: 'include',
       });
       if (!response.ok) {

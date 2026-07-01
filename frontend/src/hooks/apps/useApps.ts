@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { wafApi } from '@/lib/api-client';
+import { wafApi, apiBase } from '@/lib/api-client';
 import type { AppCreateRequest, AppUpdateRequest, AppStats } from '@/lib/api-client';
 
 export function useApps() {
@@ -68,8 +68,7 @@ export function useAppStats(appId: string) {
   return useQuery({
     queryKey: ['app-stats', appId],
     queryFn: async () => {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3044';
-      const response = await fetch(`${baseUrl}/api/v1/apps/${appId}/stats`, {
+      const response = await fetch(`${apiBase}/api/v1/apps/${appId}/stats`, {
         credentials: 'include',
       });
       if (!response.ok) {

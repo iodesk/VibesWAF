@@ -69,8 +69,57 @@ func (s *CertificateService) GetByDomain(domain string) (*model.CertificateInfo,
 	return s.toCertificateInfo(cert), nil
 }
 
-func (s *CertificateService) RenewCertificate(domain string) error {
+func (s *CertificateService) IssueDomain(domain, appID string) error {
 	if s.acmeService == nil {
+		return fmt.Errorf("ACME service not available - acme.sh not installed")
+	}
+
+	if _, err := s.repo.GetByDomain(domain); err == nil {
+		return fmt.Errorf("certificate for %s already exists", domain)
+	}
+
+	config.GetAppConfig().LogInfo("[CertService] Starting manual issue for %s", domain)
+
+	now := time.Now()
+	cert := &model.Certificate{
+		Domain:          domain,
+		AppID:           appID,
+		Status:          "pending",
+		Issuer:          "",
+		IssuedAt:        now,
+		ExpiresAt:       now,
+		AutoRenew:       true,
+		LastRenewStatus: "pending",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	if err := s.repo.Create(cert); err != nil {
+		return fmt.Errorf("failed to create certificate record: %w", err)
+	}
+
+	s.logAction(cert.ID, domain, "issue", "started", "Manual issue initiated")
+
+	onComplete := func(d string, err error) {
+		if err != nil {
+			config.GetAppConfig().LogError("[CertService] Issue failed for %s: %v", d, err)
+			s.updateCertStatusAfterIssue(d, "failed", err.Error())
+			return
+		}
+		s.updateCertStatusAfterIssue(d, "success", "Certificate issued successfully")
+	}
+
+	if err := s.acmeService.IssueAsync(domain, onComplete); err != nil {
+		s.logAction(cert.ID, domain, "issue", "failed", err.Error())
+		return fmt.Errorf("failed to issue certificate: %w", err)
+	}
+
+	s.logAction(cert.ID, domain, "issue", "pending", "Issue request submitted")
+
+	return nil
+}
+
+func (s *CertificateService) RenewCertificate(domain string) error {	if s.acmeService == nil {
 		return fmt.Errorf("ACME service not available - acme.sh not installed")
 	}
 
@@ -83,7 +132,16 @@ func (s *CertificateService) RenewCertificate(domain string) error {
 
 	s.logAction(cert.ID, domain, "renew", "started", "Manual renewal initiated")
 
-	if err := s.acmeService.IssueAsync(domain); err != nil {
+	onComplete := func(d string, err error) {
+		if err != nil {
+			config.GetAppConfig().LogError("[CertService] Renew failed for %s: %v", d, err)
+			s.updateCertStatusAfterRenew(d, "failed", err.Error())
+			return
+		}
+		s.updateCertStatusAfterRenew(d, "success", "Certificate renewed successfully")
+	}
+
+	if err := s.acmeService.RenewAsync(domain, onComplete); err != nil {
 		s.logAction(cert.ID, domain, "renew", "failed", err.Error())
 		return fmt.Errorf("failed to renew certificate: %w", err)
 	}
@@ -361,9 +419,89 @@ func (s *CertificateService) SyncAllFromFilesystem() error {
 	return nil
 }
 
+func (s *CertificateService) updateCertStatusAfterIssue(domain, newStatus, message string) {
+	cert, err := s.repo.GetByDomain(domain)
+	if err != nil {
+		config.GetAppConfig().LogError("[CertService] Failed to get cert after issue for %s: %v", domain, err)
+		return
+	}
+
+	// Re-read expiry from updated files
+	certPath := fmt.Sprintf("%s/%s/fullchain.pem", s.certDir, domain)
+	cmd := exec.Command("openssl", "x509", "-enddate", "-noout", "-in", certPath)
+	output, cerr := cmd.CombinedOutput()
+	if cerr == nil {
+		dateStr := strings.TrimPrefix(string(output), "notAfter=")
+		dateStr = strings.TrimSpace(dateStr)
+		if expiryDate, err := time.Parse("Jan 2 15:04:05 2006 MST", dateStr); err == nil {
+			cert.ExpiresAt = expiryDate
+		}
+		issuer, _ := s.getCertificateIssuer(domain)
+		cert.Issuer = issuer
+	}
+
+	cert.Status = newStatus
+	cert.LastRenewStatus = newStatus
+	now := time.Now()
+	cert.LastRenewAt = &now
+	cert.UpdatedAt = now
+
+	if newStatus == "success" {
+		cert.Status = s.determineStatus(cert.ExpiresAt)
+	}
+
+	if err := s.repo.Update(cert); err != nil {
+		config.GetAppConfig().LogError("[CertService] Failed to update cert after issue for %s: %v", domain, err)
+		return
+	}
+
+	s.logAction(cert.ID, domain, "issue", newStatus, message)
+	config.GetAppConfig().LogInfo("[CertService] Certificate %s issued: %s", domain, newStatus)
+}
+
+func (s *CertificateService) updateCertStatusAfterRenew(domain, newStatus, message string) {
+	cert, err := s.repo.GetByDomain(domain)
+	if err != nil {
+		config.GetAppConfig().LogError("[CertService] Failed to get cert after renew for %s: %v", domain, err)
+		return
+	}
+
+	// Re-read expiry from updated files
+	certPath := fmt.Sprintf("%s/%s/fullchain.pem", s.certDir, domain)
+	cmd := exec.Command("openssl", "x509", "-enddate", "-noout", "-in", certPath)
+	output, cerr := cmd.CombinedOutput()
+	if cerr == nil {
+		dateStr := strings.TrimPrefix(string(output), "notAfter=")
+		dateStr = strings.TrimSpace(dateStr)
+		if expiryDate, err := time.Parse("Jan 2 15:04:05 2006 MST", dateStr); err == nil {
+			cert.ExpiresAt = expiryDate
+		}
+		issuer, _ := s.getCertificateIssuer(domain)
+		cert.Issuer = issuer
+	}
+
+	cert.Status = newStatus
+	cert.LastRenewStatus = newStatus
+	now := time.Now()
+	cert.LastRenewAt = &now
+	cert.UpdatedAt = now
+
+	if newStatus == "success" {
+		cert.Status = s.determineStatus(cert.ExpiresAt)
+	}
+
+	if err := s.repo.Update(cert); err != nil {
+		config.GetAppConfig().LogError("[CertService] Failed to update cert after renew for %s: %v", domain, err)
+		return
+	}
+
+	s.logAction(cert.ID, domain, "renew", newStatus, message)
+	config.GetAppConfig().LogInfo("[CertService] Certificate %s renewed: %s", domain, newStatus)
+}
+
 func (s *CertificateService) toCertificateInfo(cert *model.Certificate) *model.CertificateInfo {
 	daysUntilExpiry := int(time.Until(cert.ExpiresAt).Hours() / 24)
-	isExpiringSoon := daysUntilExpiry < 30
+	isExpiringSoon := cert.Status != "pending" && daysUntilExpiry < 30
 
 	return &model.CertificateInfo{
 		Domain:          cert.Domain,

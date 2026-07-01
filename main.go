@@ -266,6 +266,10 @@ func main() {
 		GetScoringConfig: getScoringConfig,
 	})
 
+	demoService := service.NewDemoService(repos.App, repos.Certificate, repos.Settings)
+	demoService.Start()
+	defer demoService.Stop()
+
 	router := v1.NewRouter(
 		ruleService,
 		appService,
@@ -290,6 +294,8 @@ func main() {
 		floodProtector,
 		trustedHistoryScorer,
 		settingsCache,
+		newUIHandler(),
+		appCfg.DashboardHost,
 	)
 
 	httpPort := getEnvOrDefault("HTTP_PORT", "127.0.0.1:3000")

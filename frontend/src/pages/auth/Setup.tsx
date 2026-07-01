@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Shield, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { apiBase } from '@/lib/api-client'
 
 interface SetupProps {
   onComplete: () => void
@@ -30,7 +31,7 @@ export default function Setup({ onComplete }: SetupProps) {
 
     setLoading(true)
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/auth/setup`, {
+      const response = await fetch(`${apiBase}/api/v1/auth/setup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

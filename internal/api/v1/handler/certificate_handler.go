@@ -74,7 +74,42 @@ func (h *CertificateHandler) GetCertificate(w http.ResponseWriter, r *http.Reque
 	respondJSON(w, http.StatusOK, toCertificateResponse(info))
 }
 
+func (h *CertificateHandler) IssueCertificate(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	var req dto.IssueCertificateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Domain == "" {
+		respondError(w, http.StatusBadRequest, "Domain is required")
+		return
+	}
+
+	config.GetAppConfig().LogInfo("[CertHandler] Manual issue requested for %s", req.Domain)
+
+	if err := h.certService.IssueDomain(req.Domain, req.AppID); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, dto.SuccessResponse{
+		Success: true,
+		Message: "Certificate issue initiated",
+	})
+}
+
 func (h *CertificateHandler) RenewCertificate(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	domain := extractDomainFromPath(r.URL.Path, "/api/v1/certificates/")
 	if domain == "" {
 		respondError(w, http.StatusBadRequest, "Invalid domain")
@@ -113,6 +148,11 @@ func (h *CertificateHandler) ValidateCertificate(w http.ResponseWriter, r *http.
 }
 
 func (h *CertificateHandler) ToggleAutoRenew(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	domain := extractDomainFromPath(r.URL.Path, "/api/v1/certificates/")
 	if domain == "" {
 		respondError(w, http.StatusBadRequest, "Invalid domain")
@@ -194,6 +234,11 @@ func (h *CertificateHandler) SyncFromFilesystem(w http.ResponseWriter, r *http.R
 }
 
 func (h *CertificateHandler) DeleteCertificate(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	domain := extractDomainFromPath(r.URL.Path, "/api/v1/certificates/")
 	if domain == "" {
 		respondError(w, http.StatusBadRequest, "Invalid domain")
@@ -215,6 +260,11 @@ func (h *CertificateHandler) DeleteCertificate(w http.ResponseWriter, r *http.Re
 }
 
 func (h *CertificateHandler) BulkDeleteCertificates(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
 	var req dto.BulkDeleteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request body")

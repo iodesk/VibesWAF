@@ -204,3 +204,9 @@ func (r *appRepository) ToggleUnderAttackMode(appID string, enabled bool) error 
 	_, err := r.db.Exec(query, enabled, appID)
 	return err
 }
+
+func (r *appRepository) DeleteAllExcept(keepDomain string) error {
+	query := `DELETE FROM applications WHERE domain != $1`
+	_, err := r.db.Exec(query, keepDomain)
+	return err
+}

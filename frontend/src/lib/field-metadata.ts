@@ -21,10 +21,11 @@ export interface FieldDefinition {
   allowedOperators: OperatorMetadata[]
 }
 
+import { apiBase } from './api/client'
+
 let cachedFields: Record<string, FieldDefinition> | null = null
 
-// Get API base URL from environment or default
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3044'
+const API_BASE_URL = apiBase
 
 // Fetch field metadata from backend
 export async function fetchFieldMetadata(): Promise<Record<string, FieldDefinition>> {
