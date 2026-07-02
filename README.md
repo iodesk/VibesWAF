@@ -2,9 +2,51 @@
 
 A reverse proxy and WAF built for personal use and experimentation. Not production-hardened, not battle-tested: just a project to learn how WAFs work from the inside.
 
-![Pipeline Trace](screenshot/11.%20Pipeline-trace.png)
-
 Built in Go. Uses [Coraza](https://github.com/corazawaf/coraza) + OWASP CRS for managed rules, PostgreSQL for config, ClickHouse for logs, Redis for state.
+
+<table>
+  <tr>
+    <td width="50%"><img src="screenshot/overview-dash.png" alt="Dashboard Overview" width="100%" /></td>
+    <td width="50%"><img src="screenshot/overview-logs.png" alt="Logs Overview" width="100%" /></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/ClickHouse-F0F0F0?logo=clickhouse&logoColor=black" alt="ClickHouse" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/OpenResty-02303A?logo=lua&logoColor=white" alt="OpenResty" />
+</p>
+
+---
+
+## Demo
+
+Live demo available at [vibeswaf.tailgo.com](https://vibeswaf.tailgo.com)
+
+* **User:** `vibeswaf`
+* **Password:** `vibeswaf`
+
+> The demo instance runs in read-only mode for global config. Per-app settings are fully editable.
+
+> Demo Backend runs on a **VPS $14/year VPS (2 VCore 4G RAM)** Ubuntu 24.04.
+
+---
+
+## Dashboard
+
+Web UI for managing all configuration:
+
+* **Applications**: domain, upstreams, load balancing, per-app overrides, trusted proxies. [`Screenshot >`](screenshot/2.%20App-basic.png)
+* **Security Rules**: expression-based custom rules (IP, path, UA, headers, geo, ASN) with block/challenge/allow/log/skip actions. [`Screenshot >`](screenshot/2.%20App-security-rules.png)
+* **Rate Limiter**: flood profiles (basic, attack, error) and token bucket per-app rate limits. [`Screenshot >`](screenshot/4.%20Rate%20limiter%20-%20Food%20protection.png)
+* **Bot Detector**: per-rule UA/referer scores, bot IP ranges, trust level thresholds. [`Screenshot >`](screenshot/5.%20Bot%20Detector.png)
+* **WAF Engine**: Coraza paranoia level, anomaly thresholds, allowed methods, disabled rules, custom SecRules. [`Screenshot >`](screenshot/3.%20Waf%20Settings.png)
+* **IP Reputation**: manual IP and ASN scoring. [`Screenshot >`](screenshot/6.%20IP%20Reputation.png)
+* **Scoring Engine**: per-category multiplier, max score cap, enable/disable toggle, block and challenge thresholds. [`Screenshot >`](screenshot/8.%20Scoring.png)
+* **Logs**: request log viewer with raw JSON pipeline trace. [`Screenshot >`](screenshot/10.%20Logs.png)
+* **Analytics**: traffic charts, threat breakdown, score distribution. [`Screenshot >`](screenshot/12.%20Threat%20Inteligence.png)
 
 ---
 
@@ -28,12 +70,12 @@ Runs in order. If any handler makes a decision (block/challenge), the pipeline s
 ChallengeValidator -> IPAccess -> Flood -> RateLimit -> Cache -> Custom Rules
 ```
 
-- **ChallengeValidator**: validates the `ok` cookie (HMAC-SHA256 with IP + UA + timestamp + trust level). If valid, the request carries a trust level into Phase 2.
-- **IPAccess**: per-app allow/block/challenge by CIDR or single IP. Match is terminal.
-- **Flood**: 256-shard in-memory detector with configurable penalty period. Handles basic, attack, and error flood profiles.
-- **RateLimit**: token bucket per IP+UA. No Redis on the hot path.
-- **Cache**: replays cached decisions for repeat request fingerprints.
-- **Custom Rules**: expression-based rules (IP, path, UA, headers, geo, ASN). Supports `skip` action to bypass specific Phase 2 modules.
+* **ChallengeValidator**: validates the `ok` cookie (HMAC-SHA256 with IP + UA + timestamp + trust level). If valid, the request carries a trust level into Phase 2.
+* **IPAccess**: per-app allow/block/challenge by CIDR or single IP. Match is terminal.
+* **Flood**: 256-shard in-memory detector with configurable penalty period. Handles basic, attack, and error flood profiles.
+* **RateLimit**: token bucket per IP+UA. No Redis on the hot path.
+* **Cache**: replays cached decisions for repeat request fingerprints.
+* **Custom Rules**: expression-based rules (IP, path, UA, headers, geo, ASN). Supports `skip` action to bypass specific Phase 2 modules.
 
 If any Phase 1 handler issues a terminal decision, Phases 2 and 3 are skipped and the pipeline jumps directly to Phase 4.
 
@@ -69,9 +111,9 @@ All thresholds, weights, caps, and multipliers are stored in PostgreSQL and live
 
 ### Phase 4: Response
 
-- **Block**: 403 page with the reason and a Ray ID.
-- **Challenge**: slider page (see below).
-- **Allow**: proxy to upstream.
+* **Block**: 403 page with the reason and a Ray ID.
+* **Challenge**: slider page (see below).
+* **Allow**: proxy to upstream.
 
 ---
 
@@ -143,31 +185,7 @@ Each log entry includes the full pipeline trace (per-stage scores, reasons, mult
 | React + Vite | Dashboard frontend |
 | MaxMind GeoIP2 | Geo lookup + datacenter detection |
 
----
 
-## Dashboard
-
-Web UI for managing all configuration:
-
-- **Applications**: domain, upstreams, load balancing, per-app overrides, trusted proxies.
-- **Security Rules**: expression-based custom rules (IP, path, UA, headers, geo, ASN) with block/challenge/allow/log/skip actions.
-- **Rate Limiter**: flood profiles (basic, attack, error) and token bucket per-app rate limits.
-- **Bot Detector**: per-rule UA/referer scores, bot IP ranges, trust level thresholds.
-- **WAF Engine**: Coraza paranoia level, anomaly thresholds, allowed methods, disabled rules, custom SecRules.
-- **IP Reputation**: manual IP and ASN scoring.
-- **Scoring Engine**: per-category multiplier, max score cap, enable/disable toggle, block and challenge thresholds.
-- **Logs**: request log viewer with raw JSON pipeline trace.
-- **Analytics**: traffic charts, threat breakdown, score distribution.
-
----
-
-## Requirements
-
-- Go 1.25+
-- PostgreSQL 14+
-- ClickHouse
-- Redis
-- OpenResty (for TLS termination and JA4 fingerprinting)
 
 ---
 
@@ -178,7 +196,7 @@ cp .env.example .env
 # edit .env
 
 # run migrations (auto by default, set AUTO_MIGRATE=false to skip)
-./wafer
+./vibeswaf
 ```
 
 Frontend:
@@ -186,8 +204,8 @@ Frontend:
 ```sh
 cd frontend
 cp .env.example .env
-npm install
-npm run build
+bun install
+bun run build
 ```
 
 See `config/` for nginx configuration, systemd service, and ACME scripts.
@@ -196,7 +214,8 @@ See `config/` for nginx configuration, systemd service, and ACME scripts.
 
 ## Caveats
 
-- Personal project. No guarantees, no SLA.
-- Test coverage is partial.
-- Some features assume OpenResty is in front (JA4 headers, dynamic SSL).
-- Not designed for multi-tenant.
+* Personal project. No guarantees, no SLA.
+* Code assisted by AI. Architecture designed by hand.
+* Test coverage is partial.
+* Some features assume OpenResty is in front (JA4 headers, dynamic SSL).
+* Not designed for multi-tenant.
