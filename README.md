@@ -21,6 +21,12 @@ A reverse proxy and WAF built for personal use and experimentation. Not producti
 
 ---
 
+## Features
+
+See [FEATURES.md](docs/features.md) for a full list of features.
+
+---
+
 ## Demo
 
 Live demo at [vibeswaf.tailgo.com](https://vibeswaf.tailgo.com)
@@ -28,6 +34,8 @@ Live demo at [vibeswaf.tailgo.com](https://vibeswaf.tailgo.com)
 * pass: `vibeswaf`
 
 > Runs in read-only mode for global config. Per-app settings are fully editable. 
+
+>The public demo processes live Internet traffic. Dashboard analytics are generated from real requests and continuously evolve over time. Try sending requests to any *.tailgo.com subdomain to see them appear in the logs. 
 
 > Backend: $14/year VPS (2 vCore, 4 GB RAM), Ubuntu 24.04.
 
