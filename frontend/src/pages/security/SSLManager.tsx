@@ -7,6 +7,7 @@ import { CertificateTable } from '@/components/ssl/CertificateTable';
 import { useSSLCertificates } from '@/hooks/ssl/useSSLCertificates';
 import { useSSLActions } from '@/hooks/ssl/useSSLActions';
 import { RefreshCw, Search, AlertTriangle, CheckCircle, Download, Plus } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { SkeletonPage } from '@/components/shared/SkeletonLoading';
 
 const SSLManager = () => {
@@ -16,6 +17,7 @@ const SSLManager = () => {
   const [addError, setAddError] = useState<string | null>(null);
   const { certificates, loading, error, refetch, removeCertificates, updateCertificate } = useSSLCertificates();
   const { syncFromFilesystem, issueCertificate, loading: actionsLoading } = useSSLActions();
+  const { addToast } = useToast();
 
   const filteredCertificates = certificates.filter((cert) =>
     cert.domain.toLowerCase().includes(searchQuery.toLowerCase())
@@ -28,9 +30,10 @@ const SSLManager = () => {
   const handleSync = async () => {
     try {
       await syncFromFilesystem();
+      addToast('Certificates synced from filesystem', 'success');
       refetch();
-    } catch (err) {
-      console.error('Sync failed:', err);
+    } catch (err: any) {
+      addToast(err?.message || 'Sync failed', 'error');
     }
   };
 
@@ -43,11 +46,12 @@ const SSLManager = () => {
     setAddError(null);
     try {
       await issueCertificate(domain);
+      addToast('Certificate issuance initiated', 'success');
       setAddOpen(false);
       setNewDomain('');
       refetch();
-    } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Failed to issue certificate');
+    } catch (err: any) {
+      setAddError(err?.message || 'Failed to issue certificate');
     }
   };
 

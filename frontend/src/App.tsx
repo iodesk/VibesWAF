@@ -139,9 +139,25 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           <span>Sign out</span>
         </button>
         <div className="px-2.5 pt-2">
-          <span className="text-[13px] text-[hsl(var(--color-sidebar-foreground))] opacity-50">v1.0.0</span>
+          <span className="text-[13px] text-[hsl(var(--color-sidebar-foreground))] opacity-50">VibesWAF</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+function DemoBanner() {
+  const { isDemoMode, serverIP } = useDemo()
+  if (!isDemoMode) return null
+  return (
+    <div className="sticky top-0 z-50 bg-amber-600 dark:bg-amber-700 px-4 py-2 flex items-center gap-3 flex-wrap lg:hidden">
+      <span className="text-[10px] font-bold text-white uppercase tracking-wider bg-white/20 px-1.5 py-0.5 rounded">Demo</span>
+      <span className="text-[11px] text-white/80">Add/Edit per app only</span>
+      {serverIP && (
+        <span className="text-[12px] text-white/90">
+          Point domain: <span className="font-mono font-bold text-white">{serverIP}</span>
+        </span>
+      )}
     </div>
   )
 }
@@ -149,7 +165,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 function PageHeader() {
   const location = useLocation()
   const { user } = useAuth()
-  const { isDemoMode } = useDemo()
+  const { isDemoMode, serverIP } = useDemo()
 
   const allItems = navGroups.flatMap(g => g.items)
   const current = allItems.find(i => i.href === location.pathname)
@@ -157,15 +173,20 @@ function PageHeader() {
 
   return (
     <header className="border-b border-border bg-card/95 backdrop-blur-sm shrink-0">
-      {isDemoMode && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-1.5 flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Demo Mode</span>
-          <span className="text-[11px] text-amber-600/80 dark:text-amber-400/80">Global config is read-only. Per-app settings are fully editable.</span>
-        </div>
-      )}
       <div className="h-14 flex items-center px-6 gap-4">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-3">
           <h1 className="text-[14px] font-semibold text-foreground truncate">{pageTitle}</h1>
+          {isDemoMode && (
+            <>
+              <span className="hidden lg:inline text-[10px] font-bold text-white uppercase tracking-wider bg-amber-600 dark:bg-amber-700 px-2 py-0.5 rounded">Demo</span>
+              <span className="hidden lg:inline text-[11px] text-amber-600 dark:text-amber-400/80">Add/Edit per app only</span>
+              {serverIP && (
+                <span className="hidden lg:inline text-[11px] text-amber-600 dark:text-amber-400/80">
+                  Point domain: <span className="font-mono font-bold">{serverIP}</span>
+                </span>
+              )}
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggleButton />
@@ -218,23 +239,6 @@ function AppContent() {
   return (
     <div className="flex min-h-screen bg-background w-full">
 
-      {/* Mobile top bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-[hsl(var(--color-sidebar))] border-b sidebar-border flex items-center px-4 gap-3">
-        <div className="w-7 h-7 rounded-lg btn-primary flex items-center justify-center shrink-0">
-          <Shield className="w-4 h-4 text-white" />
-        </div>
-        <span className="font-semibold text-[13px] text-[hsl(var(--color-sidebar-text))]">VibesWAF</span>
-        <div className="ml-auto flex items-center gap-1">
-          <ThemeToggleButton />
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 rounded-md transition-colors text-[hsl(var(--color-sidebar-foreground))] sidebar-hover hover:text-[hsl(var(--color-sidebar-text))]"
-          >
-            {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-      </div>
-
       {/* Mobile overlay */}
       {isSidebarOpen && (
         <div
@@ -252,8 +256,27 @@ function AppContent() {
 
       {/* Main column */}
       <div className="flex-1 lg:ml-64 flex flex-col h-screen pt-14 lg:pt-0 w-full min-w-0 overflow-y-auto">
-        <div className="hidden lg:block sticky top-0 z-30">
-          <PageHeader />
+        {/* Mobile header */}
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-[hsl(var(--color-sidebar))] border-b sidebar-border flex items-center px-4 gap-3">
+          <div className="w-7 h-7 rounded-lg btn-primary flex items-center justify-center shrink-0">
+            <Shield className="w-4 h-4 text-white" />
+          </div>
+          <span className="font-semibold text-[13px] text-[hsl(var(--color-sidebar-text))]">VibesWAF</span>
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggleButton />
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 rounded-md transition-colors text-[hsl(var(--color-sidebar-foreground))] sidebar-hover hover:text-[hsl(var(--color-sidebar-text))]"
+            >
+              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+        <div className="sticky top-0 z-30">
+          <div className="hidden lg:block">
+            <PageHeader />
+          </div>
+          <DemoBanner />
         </div>
         <main className="flex-1 min-w-0 w-full max-w-[1400px] mx-auto py-4 sm:py-6 px-4 sm:px-[6%] lg:px-[8%]">
           <Suspense fallback={<LoadingFallback />}>

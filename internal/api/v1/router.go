@@ -115,7 +115,8 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			host = host[:i]
 		}
 		isInternal := host == "" || host == "localhost" || host == "127.0.0.1"
-		if isInternal {
+		isDashboard := rt.dashboardHost != "" && host == rt.dashboardHost
+		if isInternal || isDashboard {
 			rt.healthHandler.Health(w, r)
 		} else {
 			rt.healthHandler.HealthForApp(w, r, rt.wafHandler.AppService())

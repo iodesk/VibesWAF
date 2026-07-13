@@ -31,6 +31,7 @@ type AppConfig struct {
 
 
 	RedirectHTTPS bool              `json:"redirect_https"`
+	RootRedirect  string            `json:"root_redirect,omitempty"`
 	HealthCheck   HealthCheckConfig `json:"health_check"`
 
 	Advanced AdvancedConfig `json:"advanced"`
@@ -72,6 +73,10 @@ type AdvancedConfig struct {
 	AddHeaders []ResponseHeader `json:"add_headers,omitempty"`
 
 	RequestSizeLimit int64 `json:"request_size_limit"`
+
+	UpstreamPath string `json:"upstream_path,omitempty"`
+
+	UpstreamTLS_SNI string `json:"upstream_tls_sni,omitempty"`
 
 	CORS CORSConfig `json:"cors"`
 

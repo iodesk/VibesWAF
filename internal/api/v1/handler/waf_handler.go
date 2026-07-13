@@ -156,7 +156,22 @@ func (h *WAFHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// WebSocket upgrade — partial security pipeline then tunnel.
+	// Root redirect: when configured, 302 root path to custom URL.
+// Useful for auto-login pages or portal-based apps.
+if resolvedApp != nil && resolvedApp.Config.RootRedirect != "" && r.URL.Path == "/" {
+    target := resolvedApp.Config.RootRedirect
+    if r.URL.RawQuery != "" {
+        if strings.Contains(target, "?") {
+            target += "&" + r.URL.RawQuery
+        } else {
+            target += "?" + r.URL.RawQuery
+        }
+    }
+    http.Redirect(w, r, target, http.StatusFound)
+    return
+}
+
+// WebSocket upgrade — partial security pipeline then tunnel.
 	// Flow: IP Access → Flood Protection → Upgrade Validation → Tunnel
 	// Skips: WAF body scan, bot detection scoring, decision engine.
 	if isWebSocketUpgrade(r) {
@@ -355,6 +370,17 @@ func (h *WAFHandler) proxyToUpstream(w http.ResponseWriter, r *http.Request, app
 	if path == "" {
 		path = r.URL.Path
 	}
+	// UpstreamPath: prepend custom path prefix to all requests.
+	// e.g. / → /plesk/, /api → /plesk/api
+	if application != nil && application.Config.Advanced.UpstreamPath != "" {
+		prefix := application.Config.Advanced.UpstreamPath
+		prefix = strings.TrimSuffix(prefix, "/")
+		if path == "/" {
+			path = prefix
+		} else {
+			path = prefix + path
+		}
+	}
 	targetURL += path
 	if r.URL.RawQuery != "" {
 		targetURL += "?" + r.URL.RawQuery
@@ -419,12 +445,14 @@ func (h *WAFHandler) proxyToUpstream(w http.ResponseWriter, r *http.Request, app
 	upstreamKey := fmt.Sprintf("%s://%s:%d", upstream.Scheme, upstream.Host, upstream.Port)
 
 	var connectTimeout, readTimeout, sendTimeout int
+	var sni string
 	if application != nil {
 		connectTimeout = application.Config.Advanced.ConnectTimeout
 		readTimeout = application.Config.Advanced.ReadTimeout
 		sendTimeout = application.Config.Advanced.SendTimeout
+		sni = application.Config.Advanced.UpstreamTLS_SNI
 	}
-	client := transport.GetClient(upstreamKey, insecure, connectTimeout, readTimeout, sendTimeout)
+	client := transport.GetClient(upstreamKey, insecure, sni, connectTimeout, readTimeout, sendTimeout)
 
 
 	resp, err := client.Do(proxyReq)
@@ -496,6 +524,34 @@ func (h *WAFHandler) proxyToUpstream(w http.ResponseWriter, r *http.Request, app
 			w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", cache.TTL))
 		} else if cache.Enabled {
 			w.Header().Set("Cache-Control", "no-store")
+		}
+
+		// Rewrite Location header from upstream when UpstreamPath is set.
+		// Strips the prefix from internal redirects so clients get clean paths.
+		if application.Config.Advanced.UpstreamPath != "" {
+			loc := resp.Header.Get("Location")
+			if loc != "" {
+				prefix := application.Config.Advanced.UpstreamPath
+				prefix = strings.TrimSuffix(prefix, "/")
+				// Strip absolute URL prefix
+				upstreamPrefix := upstream.Scheme + "://" + upstream.Host
+				if upstream.Port != 80 && upstream.Port != 443 {
+					upstreamPrefix += fmt.Sprintf(":%d", upstream.Port)
+				}
+				loc = strings.TrimPrefix(loc, upstreamPrefix)
+				loc = strings.TrimPrefix(loc, "//"+upstream.Host)
+
+				// Strip internal path prefix so client sees clean URLs
+				if strings.HasPrefix(loc, prefix) {
+					suffix := strings.TrimPrefix(loc, prefix)
+					if suffix == "" {
+						loc = "/"
+					} else {
+						loc = suffix
+					}
+				}
+				w.Header().Set("Location", loc)
+			}
 		}
 	}
 

@@ -146,8 +146,8 @@ export default function AppForm() {
         addToast('Application created successfully', 'success')
       }
       navigate('/applications')
-    } catch {
-      addToast(`Failed to ${isEdit ? 'update' : 'create'} application`, 'error')
+    } catch (err: any) {
+      addToast(err?.message || `Failed to ${isEdit ? 'update' : 'create'} application`, 'error')
     }
   }
 

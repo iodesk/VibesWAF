@@ -5,9 +5,10 @@ export function PerformanceMetrics() {
   const { data: stats } = usePerformanceStats()
   const { data: cacheStats } = useCacheStats()
 
-  if (!stats || stats.request_count === 0) return null
+  const hasData = stats && stats.request_count > 0
 
   const fmt = (v: number) => {
+    if (!hasData) return '—'
     if (v === 0) return '0'
     if (v < 1) return v.toFixed(2)
     if (v < 10) return v.toFixed(1)
@@ -15,9 +16,9 @@ export function PerformanceMetrics() {
   }
 
   const cards = [
-    { label: 'Engine', icon: Cpu, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', p50: stats.p50_pipeline_ms, p95: stats.p95_pipeline_ms, p99: stats.p99_pipeline_ms },
-    { label: 'Upstream', icon: Globe, color: 'text-blue-500', bgColor: 'bg-blue-500/10', p50: stats.p50_upstream_ms, p95: stats.p95_upstream_ms, p99: stats.p99_upstream_ms },
-    { label: 'Total', icon: Zap, color: 'text-amber-500', bgColor: 'bg-amber-500/10', p50: stats.p50_latency_ms, p95: stats.p95_latency_ms, p99: stats.p99_latency_ms },
+    { label: 'Engine', icon: Cpu, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10', p50: hasData ? stats.p50_pipeline_ms : 0, p95: hasData ? stats.p95_pipeline_ms : 0, p99: hasData ? stats.p99_pipeline_ms : 0 },
+    { label: 'Upstream', icon: Globe, color: 'text-blue-500', bgColor: 'bg-blue-500/10', p50: hasData ? stats.p50_upstream_ms : 0, p95: hasData ? stats.p95_upstream_ms : 0, p99: hasData ? stats.p99_upstream_ms : 0 },
+    { label: 'Total', icon: Zap, color: 'text-amber-500', bgColor: 'bg-amber-500/10', p50: hasData ? stats.p50_latency_ms : 0, p95: hasData ? stats.p95_latency_ms : 0, p99: hasData ? stats.p99_latency_ms : 0 },
   ]
 
   return (
@@ -34,11 +35,11 @@ export function PerformanceMetrics() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-[9px] text-muted-foreground">P50</span>
-              <span className="text-[12px] font-bold font-mono text-foreground">{fmt(card.p50)}<span className="text-[9px] font-normal text-muted-foreground">ms</span></span>
+              <span className="text-[12px] font-bold font-mono text-foreground">{fmt(card.p50)}<span className="text-[9px] font-normal text-muted-foreground">{hasData ? 'ms' : ''}</span></span>
               <span className="text-[9px] text-muted-foreground">P95</span>
-              <span className="text-[12px] font-bold font-mono text-foreground">{fmt(card.p95)}<span className="text-[9px] font-normal text-muted-foreground">ms</span></span>
+              <span className="text-[12px] font-bold font-mono text-foreground">{fmt(card.p95)}<span className="text-[9px] font-normal text-muted-foreground">{hasData ? 'ms' : ''}</span></span>
               <span className="text-[9px] text-muted-foreground">P99</span>
-              <span className="text-[12px] font-bold font-mono text-foreground">{fmt(card.p99)}<span className="text-[9px] font-normal text-muted-foreground">ms</span></span>
+              <span className="text-[12px] font-bold font-mono text-foreground">{fmt(card.p99)}<span className="text-[9px] font-normal text-muted-foreground">{hasData ? 'ms' : ''}</span></span>
             </div>
           </div>
         )

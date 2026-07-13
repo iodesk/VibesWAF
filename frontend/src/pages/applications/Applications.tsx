@@ -44,8 +44,8 @@ export default function Applications() {
       await deleteApp.mutateAsync(selectedApp.id)
       addToast('Application deleted', 'success')
       setIsDeleteOpen(false)
-    } catch {
-      addToast('Failed to delete application', 'error')
+    } catch (err: any) {
+      addToast(err?.message || 'Failed to delete application', 'error')
     }
   }
 
@@ -167,7 +167,7 @@ export default function Applications() {
 
       {/* Delete Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-foreground">Delete Application</DialogTitle>
             <DialogDescription className="text-sm">

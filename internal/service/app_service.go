@@ -23,6 +23,7 @@ type appSnapshot struct {
 type AppService struct {
 	repo          repository.AppRepository
 	acmeService   *acme.Service
+	certService   *CertificateService
 	healthChecker *HealthCheckService
 	streamProxy   *stream.Proxy
 	nginxManager  *stream.NginxManager
@@ -32,10 +33,11 @@ type AppService struct {
 	stopCh   chan struct{}
 }
 
-func NewAppService(repo repository.AppRepository, acmeService *acme.Service, streamProxy *stream.Proxy, nginxManager *stream.NginxManager) *AppService {
+func NewAppService(repo repository.AppRepository, acmeService *acme.Service, certService *CertificateService, streamProxy *stream.Proxy, nginxManager *stream.NginxManager) *AppService {
 	s := &AppService{
 		repo:         repo,
 		acmeService:  acmeService,
+		certService:  certService,
 		streamProxy:  streamProxy,
 		nginxManager: nginxManager,
 		stopCh:       make(chan struct{}),
@@ -114,7 +116,13 @@ func (s *AppService) CreateApp(a *app.App) error {
 		s.setupStream(a)
 	} else {
 		if s.acmeService != nil {
-			s.acmeService.AutoProvision(a.Domain)
+			// Try to sync existing filesystem cert to DB first
+			if err := s.certService.SyncFromACME(a.Domain, a.ID); err != nil {
+				// No filesystem cert yet — create pending DB record and issue async
+				if err := s.certService.IssueDomain(a.Domain, a.ID); err != nil {
+					config.GetAppConfig().LogWarn("[AppService] Failed to auto-issue cert for %s: %v", a.Domain, err)
+				}
+			}
 		}
 		s.healthChecker.Start(a)
 	}
@@ -123,6 +131,14 @@ func (s *AppService) CreateApp(a *app.App) error {
 }
 
 func (s *AppService) UpdateApp(a *app.App) error {
+	cfg := config.GetAppConfig()
+	if cfg.DemoMode {
+		existing, _ := s.repo.GetByID(a.ID)
+		if existing != nil && existing.Domain == cfg.DemoDomain {
+			return fmt.Errorf("cannot modify immortal domain in demo mode")
+		}
+	}
+
 	if err := a.Validate(); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
@@ -139,7 +155,7 @@ func (s *AppService) UpdateApp(a *app.App) error {
 
 	s.reloadSnapshot()
 
-	config.GetAppConfig().LogInfo("[AppService] Updated app: %s", a.ID)
+	cfg.LogInfo("[AppService] Updated app: %s", a.ID)
 
 	if a.IsStream() {
 		s.streamProxy.StopForApp(a.ID)
@@ -155,13 +171,18 @@ func (s *AppService) UpdateApp(a *app.App) error {
 func (s *AppService) DeleteApp(id string) error {
 	existing, _ := s.repo.GetByID(id)
 
+	cfg := config.GetAppConfig()
+	if cfg.DemoMode && existing != nil && existing.Domain == cfg.DemoDomain {
+		return fmt.Errorf("cannot delete immortal domain in demo mode")
+	}
+
 	if err := s.repo.Delete(id); err != nil {
 		return fmt.Errorf("failed to delete app: %w", err)
 	}
 
 	s.reloadSnapshot()
 
-	config.GetAppConfig().LogInfo("[AppService] Deleted app: %s", id)
+	cfg.LogInfo("[AppService] Deleted app: %s", id)
 
 	if existing != nil && existing.IsStream() {
 		s.streamProxy.StopForApp(id)

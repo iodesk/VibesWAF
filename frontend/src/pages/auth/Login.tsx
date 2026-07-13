@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { Shield, AlertCircle } from 'lucide-react'
+import { useDemo } from '@/contexts/DemoContext'
+import { Shield, AlertCircle, Info } from 'lucide-react'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -8,6 +9,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const { isDemoMode, demoUser, demoPass } = useDemo()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,7 +42,7 @@ export default function Login() {
             A reverse proxy and WAF for personal use and experimentation.
           </p>
         </div>
-        <p className="text-[11px] text-[hsl(var(--color-sidebar-foreground))]">v1.0.0 · Personal project</p>
+        <p className="text-[11px] text-[hsl(var(--color-sidebar-foreground))]">VibesWAF</p>
       </div>
 
       {/* Right panel — form */}
@@ -58,6 +60,17 @@ export default function Login() {
             <h1 className="text-lg font-bold text-foreground">Sign in</h1>
             <p className="text-xs text-muted-foreground mt-1">Enter your credentials</p>
           </div>
+
+          {isDemoMode && demoUser && demoPass && (
+            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-blue-600 dark:text-blue-400 space-y-0.5">
+                <p className="font-semibold">Demo Credentials</p>
+                <p>Username: <span className="font-mono font-bold">{demoUser}</span></p>
+                <p>Password: <span className="font-mono font-bold">{demoPass}</span></p>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded flex items-start gap-2.5">

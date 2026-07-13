@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useSSLActions } from '@/hooks/ssl/useSSLActions';
+import { useToast } from '@/components/ui/toast';
 import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Eye, Trash2, AlertCircle } from 'lucide-react';
 import { CertificateDetailsDialog } from '@/components/ssl/CertificateDetailsDialog';
 import type { Certificate } from '@/lib/api-client';
@@ -17,6 +18,7 @@ interface CertificateTableProps {
 
 export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }: CertificateTableProps) => {
   const { renewCertificate, toggleAutoRenew, deleteCertificate, bulkDeleteCertificates, loading } = useSSLActions();
+  const { addToast } = useToast();
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedDomains, setSelectedDomains] = useState<Set<string>>(new Set());
@@ -26,11 +28,12 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
   const handleRenew = async (domain: string) => {
     try {
       await renewCertificate(domain);
+      addToast('Certificate renewal initiated', 'success');
       if (onUpdate) {
         onUpdate(domain, { last_renew_status: 'pending' });
       }
-    } catch (err) {
-      console.error('Renew failed:', err);
+    } catch (err: any) {
+      addToast(err?.message || 'Renew failed', 'error');
     }
   };
 
@@ -45,13 +48,14 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
   const handleToggleAutoRenew = async (domain: string, enabled: boolean) => {
     try {
       await toggleAutoRenew(domain, enabled);
+      addToast(enabled ? 'Auto-renew enabled' : 'Auto-renew disabled', 'success');
       if (onUpdate) {
         onUpdate(domain, { auto_renew: enabled });
       } else {
         onRefresh();
       }
-    } catch (err) {
-      console.error('Toggle auto-renew failed:', err);
+    } catch (err: any) {
+      addToast(err?.message || 'Toggle auto-renew failed', 'error');
     }
   };
 
@@ -64,13 +68,14 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
     if (!deleteTarget) return;
     try {
       await deleteCertificate(deleteTarget);
+      addToast('Certificate deleted', 'success');
       if (onDelete) {
         onDelete([deleteTarget]);
       } else {
         onRefresh();
       }
-    } catch (err) {
-      console.error('Delete failed:', err);
+    } catch (err: any) {
+      addToast(err?.message || 'Delete failed', 'error');
     } finally {
       setDeleteTarget(null);
     }
@@ -80,14 +85,15 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
     try {
       const domainsToDelete = Array.from(selectedDomains);
       await bulkDeleteCertificates(domainsToDelete);
+      addToast('Certificates deleted', 'success');
       setSelectedDomains(new Set());
       if (onDelete) {
         onDelete(domainsToDelete);
       } else {
         onRefresh();
       }
-    } catch (err) {
-      console.error('Bulk delete failed:', err);
+    } catch (err: any) {
+      addToast(err?.message || 'Bulk delete failed', 'error');
     } finally {
       setBulkDeleteOpen(false);
     }

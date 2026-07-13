@@ -16,7 +16,7 @@ const (
 	maxLogBackups = 3
 )
 
-const Version = "1.0.4"
+const Version = "1.0.5"
 
 type AppConfig struct {
 	Debug                  bool
@@ -33,6 +33,9 @@ type AppConfig struct {
 	DemoMode      bool
 	DemoDomain    string // immortal domain, never deleted on reset
 	ResetIntervalH int   // 0 = disabled, >0 = reset every N hours
+	DemoUser      string // demo credentials shown on login page
+	DemoPass      string
+	ServerIP      string // public IP for domain pointing
 
 	// Dashboard host — requests with this Host header are served the embedded UI.
 	// Example: panel.vibeswaf.com
@@ -64,6 +67,9 @@ func GetAppConfig() *AppConfig {
 		appConfig.DemoMode = getEnvBool("DEMO", false)
 		appConfig.DemoDomain = getEnvOrDefault("DEMO_DOMAIN_IMO", "def.demo.tailgo.com")
 		appConfig.ResetIntervalH = parseNonNegativeInt("DEMO_AUTO_DEL", 0)
+		appConfig.DemoUser = getEnvOrDefault("DEMO_USER", "")
+		appConfig.DemoPass = getEnvOrDefault("DEMO_PASS", "")
+		appConfig.ServerIP = getEnvOrDefault("SERVER_IP", "")
 		appConfig.DashboardHost = getEnvOrDefault("DASHBOARD_HOST", "")
 	})
 	return appConfig

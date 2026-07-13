@@ -42,6 +42,8 @@ export interface AdvancedConfig {
   proxy_buffering: boolean;
   add_headers: ResponseHeader[];
   request_size_limit: number;
+  upstream_path?: string;
+  upstream_tls_sni?: string;
   cors: CORSConfig;
   cache: CacheConfig;
 }
@@ -58,6 +60,7 @@ export interface AppConfig {
   lb_method: "round-robin" | "least-conn" | "ip-hash";
   listen_port?: number;
   redirect_https: boolean;
+  root_redirect?: string;
   health_check: HealthCheckConfig;
   advanced?: AdvancedConfig;
 }
@@ -235,6 +238,9 @@ export interface HealthResponse {
   status: string;
   demo?: boolean;
   version?: string;
+  demo_user?: string;
+  demo_pass?: string;
+  server_ip?: string;
 }
 
 export interface RateLimitConfig {

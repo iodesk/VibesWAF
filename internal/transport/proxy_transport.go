@@ -18,9 +18,10 @@ var pool = &transportPool{
 	transports: make(map[string]*http.Transport),
 }
 
-// Get returns a reusable transport for the given upstream key.
+// Get returns a reusable transport for the given key.
 // insecure=true disables TLS verification (AllowInsecureSSL).
-func (p *transportPool) Get(key string, insecure bool) *http.Transport {
+// sni sets TLS ServerName (SNI); empty = use hostname from URL.
+func (p *transportPool) Get(key string, insecure bool, sni string) *http.Transport {
 	p.mu.RLock()
 	t, ok := p.transports[key]
 	p.mu.RUnlock()
@@ -41,8 +42,14 @@ func (p *transportPool) Get(key string, insecure bool) *http.Transport {
 		DisableKeepAlives:   false,
 		ForceAttemptHTTP2:   true,
 	}
-	if insecure {
-		t.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+	if insecure || sni != "" {
+		t.TLSClientConfig = &tls.Config{}
+		if insecure {
+			t.TLSClientConfig.InsecureSkipVerify = true //nolint:gosec
+		}
+		if sni != "" {
+			t.TLSClientConfig.ServerName = sni
+		}
 	}
 	p.transports[key] = t
 	return t
@@ -50,7 +57,8 @@ func (p *transportPool) Get(key string, insecure bool) *http.Transport {
 
 // GetClient returns an *http.Client backed by a pooled transport.
 // connectTimeout, readTimeout, sendTimeout are in seconds (0 = use default 5/60/60).
-func GetClient(key string, insecure bool, connectTimeout, readTimeout, sendTimeout int) *http.Client {
+// sni overrides TLS ServerName (SNI); empty = use hostname from URL.
+func GetClient(key string, insecure bool, sni string, connectTimeout, readTimeout, sendTimeout int) *http.Client {
 	if connectTimeout <= 0 {
 		connectTimeout = 5
 	}
@@ -61,10 +69,16 @@ func GetClient(key string, insecure bool, connectTimeout, readTimeout, sendTimeo
 		sendTimeout = 60
 	}
 
+	// Include sni in pool key so transports with different SNI are not shared.
+	poolKey := key
+	if sni != "" {
+		poolKey += "|sni=" + sni
+	}
+
 	totalTimeout := time.Duration(connectTimeout+readTimeout+sendTimeout) * time.Second
 
 	return &http.Client{
-		Transport: pool.Get(key, insecure),
+		Transport: pool.Get(poolKey, insecure, sni),
 		Timeout:   totalTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse

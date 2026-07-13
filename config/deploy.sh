@@ -132,6 +132,8 @@ chown -R $DEPLOY_USER:$DEPLOY_USER $DEPLOY_DIR
 chmod +x $DEPLOY_DIR/vibeswaf
 chmod 600 $DEPLOY_DIR/.env
 
+usermod -aG redis vibeswaf
+
 chown -R openresty:openresty /etc/openresty
 chown -R openresty:openresty /opt/certs
 chmod -R 755 /opt/certs

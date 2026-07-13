@@ -134,7 +134,7 @@ func main() {
 	defer streamProxy.Close()
 	nginxManager := stream.NewNginxManager()
 
-	appService := service.NewAppService(repos.App, acmeService, streamProxy, nginxManager)
+	appService := service.NewAppService(repos.App, acmeService, certificateService, streamProxy, nginxManager)
 
 	wafCfg, err := repos.Settings.GetWAFConfig()
 	if err != nil {

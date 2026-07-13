@@ -77,6 +77,16 @@ export function AdvancedTab({ config, updateConfig }: AdvancedTabProps) {
         <h2 className="text-sm font-semibold text-foreground">Upstream Connection</h2>
         <Card className="shadow-none border-border">
           <CardContent className="p-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-bold text-muted-foreground uppercase">Upstream Path</Label>
+              <Input
+                value={adv?.upstream_path || ''}
+                onChange={(e) => updateAdv({ upstream_path: e.target.value })}
+                placeholder="/api/v1 (optional)"
+                className="h-9 text-xs border-input font-mono"
+              />
+              <p className="text-[9px] text-muted-foreground">Override request path sent to upstream. All requests to this app will proxy to this path. Leave empty to forward original path.</p>
+            </div>
             <div className="space-y-2">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Timeouts (seconds)</p>
               <div className="grid grid-cols-3 gap-3">
@@ -139,6 +149,16 @@ export function AdvancedTab({ config, updateConfig }: AdvancedTabProps) {
                   checked={adv?.allow_insecure_ssl || false}
                   onCheckedChange={(c) => updateAdv({ allow_insecure_ssl: c })}
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase">TLS SNI</Label>
+                <Input
+                  value={adv?.upstream_tls_sni || ''}
+                  onChange={(e) => updateAdv({ upstream_tls_sni: e.target.value })}
+                  placeholder="exampledomain.com (optional)"
+                  className="h-9 text-xs border-input font-mono"
+                />
+                <p className="text-[9px] text-muted-foreground">Override TLS ServerName (SNI) for upstream HTTPS connections. Use when upstream host is an IP or different domain.</p>
               </div>
               <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
                 <div className="space-y-0.5">

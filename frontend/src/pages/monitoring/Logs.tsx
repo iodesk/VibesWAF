@@ -81,6 +81,67 @@ function resultColor(result?: string, score?: number): string {
   return 'text-muted-foreground'
 }
 
+function parseTrustedHistoryProgress(reason: string): { current: number; threshold: number } | null {
+  // Matches patterns like "30 / 50 clean requests" or "30/50 clean requests"
+  const match = reason.match(/(\d+)\s*\/\s*(\d+)/)
+  if (!match) return null
+  return { current: parseInt(match[1], 10), threshold: parseInt(match[2], 10) }
+}
+
+function StableSessionEvidence({ evidence }: { evidence: any }) {
+  if (!evidence) return null
+  const e = typeof evidence === 'string' ? (() => { try { return JSON.parse(evidence) } catch { return null } })() : evidence
+  if (!e || (e.ja4_match === undefined && e.ja4h_match === undefined && e.fp_match === undefined)) return null
+
+  return (
+    <div className="px-2 pb-1.5 flex flex-wrap gap-1.5">
+      {e.ja4_match !== undefined && (
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase ${e.ja4_match ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+          JA4 {e.ja4_match ? '✓' : '✗'}
+        </span>
+      )}
+      {e.ja4h_match !== undefined && (
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase ${e.ja4h_match ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+          JA4H {e.ja4h_match ? '✓' : '✗'}
+        </span>
+      )}
+      {e.fp_match !== undefined && (
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase ${e.fp_match ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+          HTTP FP {e.fp_match ? '✓' : '✗'}
+        </span>
+      )}
+      {e.reduction !== undefined && e.reduction < 0 && (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-emerald-500/10 text-emerald-400">
+          ↓ {e.reduction}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function TrustedHistoryProgress({ reason }: { reason: string }) {
+  const progress = parseTrustedHistoryProgress(reason)
+  if (!progress) return null
+
+  const pct = Math.min((progress.current / progress.threshold) * 100, 100)
+
+  return (
+    <div className="px-2 pb-1.5">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full bg-emerald-500/60 transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+          {progress.current}/{progress.threshold}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function FingerprintSection({ request }: { request: RequestMetadata }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -249,11 +310,13 @@ function PipelineDrawer({ log, onClose }: { log: LogEntry; onClose: () => void }
                         : isSkipped
                           ? 'bg-border'
                           : 'bg-muted-foreground/30'
-                    const dotRing = isTriggered && !isTerminal
-                      ? 'ring-2 ring-amber-400/30'
-                      : isTerminal
-                        ? (stage.result === 'BLOCK' ? 'ring-2 ring-red-500/30' : 'ring-2 ring-amber-500/30')
-                        : ''
+                    const dotRing = isTerminal
+                      ? (stage.result === 'BLOCK' ? 'ring-2 ring-red-500/30' : 'ring-2 ring-amber-500/30')
+                      : isTriggered && stage.score !== undefined && stage.score < 0
+                        ? 'ring-2 ring-emerald-400/30'
+                        : isTriggered
+                          ? 'ring-2 ring-amber-400/30'
+                          : ''
 
                     return (
                       <div key={i} className="flex gap-3">
@@ -301,6 +364,12 @@ function PipelineDrawer({ log, onClose }: { log: LogEntry; onClose: () => void }
                             <div className="px-2 pb-1">
                               <p className="text-[11px] text-muted-foreground leading-relaxed">{stage.reason}</p>
                             </div>
+                          )}
+                          {stage.stage === 'stable_session' && stage.evidence && (
+                            <StableSessionEvidence evidence={stage.evidence} />
+                          )}
+                          {stage.stage === 'trusted_history' && stage.result === 'PENDING' && stage.reason && (
+                            <TrustedHistoryProgress reason={stage.reason} />
                           )}
                         </div>
                       </div>

@@ -14,9 +14,10 @@ type RequestMetrics struct {
 }
 
 type PerformanceTracker struct {
-	mu      sync.RWMutex
-	metrics []RequestMetrics
-	window  time.Duration
+	mu        sync.RWMutex
+	metrics   []RequestMetrics
+	window    time.Duration
+	lastStats Stats
 }
 
 type Stats struct {
@@ -91,10 +92,6 @@ func (pt *PerformanceTracker) Record(wallTime, cpuTime time.Duration) {
 func (pt *PerformanceTracker) GetStats() Stats {
 	pt.mu.RLock()
 	count := len(pt.metrics)
-	if count == 0 {
-		pt.mu.RUnlock()
-		return Stats{}
-	}
 
 	// Copy metrics outside the lock so sorting does not block writers.
 	cutoff := time.Now().Add(-pt.window)
@@ -107,7 +104,10 @@ func (pt *PerformanceTracker) GetStats() Stats {
 	pt.mu.RUnlock()
 
 	if len(snapshot) == 0 {
-		return Stats{}
+		pt.mu.RLock()
+		ls := pt.lastStats
+		pt.mu.RUnlock()
+		return ls
 	}
 
 	latencies := make([]float64, len(snapshot))
@@ -133,7 +133,7 @@ func (pt *PerformanceTracker) GetStats() Stats {
 	sort.Float64s(upstreamLatencies)
 
 	n := float64(len(snapshot))
-	return Stats{
+	stats := Stats{
 		P50LatencyMs:  percentile(latencies, 0.50),
 		P90LatencyMs:  percentile(latencies, 0.90),
 		P95LatencyMs:  percentile(latencies, 0.95),
@@ -149,6 +149,11 @@ func (pt *PerformanceTracker) GetStats() Stats {
 		P99UpstreamMs: percentile(upstreamLatencies, 0.99),
 		RequestCount:  len(snapshot),
 	}
+
+	pt.mu.Lock()
+	pt.lastStats = stats
+	pt.mu.Unlock()
+	return stats
 }
 
 // percentile returns the p-th percentile using the nearest-rank method.

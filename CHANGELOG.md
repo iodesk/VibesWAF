@@ -1,6 +1,35 @@
 # Changelog
 
 
+
+
+## [1.0.5] - 2026-07-07
+
+### Changed
+
+- Performance stats now show last-known P50/P95/P99 when window is empty instead of blank dash. (`internal/metrics/performance.go`)
+- Demo banner now sticky top, full width, shows "Point your domain to IP: x.x.x.x" via `SERVER_IP` env. (`frontend/src/App.tsx`)
+- Login page shows demo credentials (`DEMO_USER`/`DEMO_PASS`) when demo mode active. (`frontend/src/pages/auth/Login.tsx`)
+- Added `DEMO_USER`, `DEMO_PASS`, `SERVER_IP` env vars to `.env`, `.env.demo`, `.env.example`. (`internal/config/app_config.go`)
+- Health endpoint returns `demo_user`, `demo_pass`, `server_ip` when demo mode enabled. (`internal/api/v1/handler/health_handler.go`)
+- DemoContext exposes `demoUser`, `demoPass`, `serverIP` from health response. (`frontend/src/contexts/DemoContext.tsx`)
+- Domain-level `root_redirect` added — 302 redirect / to custom path (e.g. auto-login URL). (`internal/domain/app/app.go`, `internal/api/v1/handler/waf_handler.go`, `frontend/src/lib/api/types.ts`, `frontend/src/pages/applications/tabs/BasicTab.tsx`)
+- `upstream_tls_sni` added to Advanced config — override TLS ServerName (SNI) for upstream HTTPS connections. Pool key includes SNI to prevent transport reuse conflicts. (`internal/domain/app/app.go`, `internal/transport/proxy_transport.go`, `internal/api/v1/handler/waf_handler.go`, `frontend/src/lib/api/types.ts`, `frontend/src/pages/applications/tabs/AdvancedTab.tsx`)
+- CreateApp now syncs existing filesystem cert to DB or creates pending cert record and auto-issues via LE; no more manual sync needed for certs to appear in panel. (`internal/service/app_service.go`, `internal/service/certificate_service.go`, `main.go`)
+- PerformanceMetrics shown always (no `return null` when empty); fallback `—` when no traffic data. (`frontend/src/components/shared/PerformanceMetrics.tsx`)
+- Error toast on AppForm/Applications now shows actual API error message instead of generic fallback. (`frontend/src/pages/applications/AppForm.tsx`, `frontend/src/pages/applications/Applications.tsx`)
+- SSL CertificateTable and SSLManager now show toast notifications on success/error instead of silent console.error. (`frontend/src/components/ssl/CertificateTable.tsx`, `frontend/src/pages/security/SSLManager.tsx`)
+
+### Security
+
+- Demo mode now blocks update/delete of immortal domain (`DEMO_DOMAIN_IMO`) via API guard in `AppService`. (`internal/service/app_service.go`)
+
+### Internal
+
+- Drop erroneous unique constraint `ip_access_rules_ip_range_key` on `ip_access_rules.ip_range` — app-level overlap check in service already prevents duplicates. (`internal/migration/init_postgres.sql`, `migrations/init_postgres.sql`)
+
+---
+
 ## [1.0.4] - 2026-07-01
 
 ### Security

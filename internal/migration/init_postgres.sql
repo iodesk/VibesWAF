@@ -7,11 +7,17 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS applications (
     app_id           TEXT PRIMARY KEY,
     domain           TEXT NOT NULL UNIQUE,
+    upstream         TEXT,
     config           JSONB NOT NULL DEFAULT '{}',
+    advanced_config  JSONB NOT NULL DEFAULT '{"listen_ipv6": false, "host_header_value": "$http_host", "allow_insecure_ssl": false, "modify_host_header": false, "pass_x_forwarded_host": true, "pass_x_forwarded_proto": true}',
     under_attack_mode BOOLEAN NOT NULL DEFAULT false,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration: add columns that may not exist yet
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS upstream TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS advanced_config JSONB NOT NULL DEFAULT '{"listen_ipv6": false, "host_header_value": "$http_host", "allow_insecure_ssl": false, "modify_host_header": false, "pass_x_forwarded_host": true, "pass_x_forwarded_proto": true}';
 
 -- 2. Security Rules
 CREATE TABLE IF NOT EXISTS security_rules (
@@ -19,7 +25,7 @@ CREATE TABLE IF NOT EXISTS security_rules (
     app_id           TEXT REFERENCES applications(app_id) ON DELETE CASCADE,
     name             TEXT NOT NULL,
     scope            TEXT NOT NULL DEFAULT 'app',
-    rule_group       TEXT NOT NULL DEFAULT '',
+    rule_group       TEXT NOT NULL DEFAULT 'custom',
     expression_raw   TEXT NOT NULL,
     expression_ast   JSONB,
     action           TEXT NOT NULL DEFAULT 'block',
@@ -37,7 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_security_rules_scope_app
 -- 3. IP Access Rules
 CREATE TABLE IF NOT EXISTS ip_access_rules (
     id               SERIAL PRIMARY KEY,
-    app_id           TEXT NOT NULL REFERENCES applications(app_id) ON DELETE CASCADE,
+    app_id           TEXT NOT NULL DEFAULT 'default',
     ip_range         CIDR NOT NULL,
     description      TEXT NOT NULL DEFAULT '',
     action           TEXT NOT NULL DEFAULT 'block',
@@ -59,18 +65,21 @@ CREATE TABLE IF NOT EXISTS bot_patterns (
     enabled          BOOLEAN NOT NULL DEFAULT true,
     description      TEXT NOT NULL DEFAULT '',
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(pattern_type, pattern)
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 5. Bot Whitelist
 CREATE TABLE IF NOT EXISTS bot_whitelist (
     id               SERIAL PRIMARY KEY,
-    ip_range         TEXT NOT NULL,
+    ip_range         CIDR NOT NULL,
     description      TEXT NOT NULL DEFAULT '',
     enabled          BOOLEAN NOT NULL DEFAULT true,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration: add updated_at if not exists
+ALTER TABLE bot_whitelist ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- 6. Bot IP Ranges
 CREATE TABLE IF NOT EXISTS bot_ip_ranges (
@@ -119,18 +128,18 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 
 -- 10. Certificates
 CREATE TABLE IF NOT EXISTS certificates (
-    cert_id          SERIAL PRIMARY KEY,
-    domain           TEXT NOT NULL,
-    app_id           TEXT NOT NULL REFERENCES applications(app_id) ON DELETE CASCADE,
-    status           TEXT NOT NULL DEFAULT 'pending',
-    issuer           TEXT NOT NULL DEFAULT '',
-    issued_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    auto_renew       BOOLEAN NOT NULL DEFAULT true,
-    last_renew_at    TIMESTAMPTZ,
-    last_renew_status TEXT NOT NULL DEFAULT '',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    cert_id           SERIAL PRIMARY KEY,
+    domain            VARCHAR NOT NULL,
+    app_id            VARCHAR NOT NULL,
+    status            VARCHAR NOT NULL DEFAULT 'pending',
+    issuer            VARCHAR NOT NULL DEFAULT 'Let''s Encrypt',
+    issued_at         TIMESTAMP NOT NULL DEFAULT NOW(),
+    expires_at        TIMESTAMP NOT NULL,
+    auto_renew        BOOLEAN NOT NULL DEFAULT true,
+    last_renew_at     TIMESTAMP,
+    last_renew_status VARCHAR NOT NULL DEFAULT 'none',
+    created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_certificates_domain ON certificates(domain);
@@ -159,8 +168,7 @@ CREATE TABLE IF NOT EXISTS ip_reputation_entries (
     description      TEXT NOT NULL DEFAULT '',
     enabled          BOOLEAN NOT NULL DEFAULT true,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(entry_type, value)
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Migration: add category column if not exists
@@ -174,6 +182,12 @@ END $$;
 DO $$ BEGIN
   ALTER TABLE bot_ip_ranges ADD CONSTRAINT bot_ip_ranges_name_unique UNIQUE (name);
 EXCEPTION WHEN duplicate_table THEN NULL;
+END $$;
+
+-- Drop erroneous unique constraint on ip_range (duplicate entry prevention uses app-level overlap check)
+DO $$ BEGIN
+  ALTER TABLE ip_access_rules DROP CONSTRAINT IF EXISTS ip_access_rules_ip_range_key;
+EXCEPTION WHEN undefined_object THEN NULL;
 END $$;
 
 -- ============================================================

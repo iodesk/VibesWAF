@@ -180,6 +180,16 @@ export function BasicTab({ formData, isEdit, setFormData, updateConfig }: BasicT
               </div>
             </div>
             <div className="space-y-2">
+              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Redirect Root</Label>
+              <Input
+                value={formData.config.root_redirect || ''}
+                onChange={(e) => updateConfig('root_redirect', e.target.value)}
+                placeholder="/login?key=value (optional)"
+                className="border-input font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">302 redirect / to this path. Useful for auto-login pages.</p>
+            </div>
+            <div className="space-y-2">
               <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Description</Label>
               <Input
                 value={formData.description || ''}
