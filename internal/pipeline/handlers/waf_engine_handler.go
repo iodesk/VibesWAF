@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/service"
-	"github.com/vibeswaf/waf/internal/waf"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/service"
+	"github.com/iodesk/VibesWAF/internal/waf"
 )
 
 type WAFMatchedRule struct {

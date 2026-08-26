@@ -1,6 +1,6 @@
 package config
 
-import "github.com/vibeswaf/waf/internal/model"
+import "github.com/iodesk/VibesWAF/internal/model"
 
 type WAFConfigReader interface {
 	GetWAFConfig() (model.WAFConfig, error)

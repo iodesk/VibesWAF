@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type IPAccessEvidence struct {
@@ -36,7 +36,7 @@ func (h *IPAccessHandler) Handle(ctx *pipeline.Context) error {
 
 	h.appCfg.LogDebug("[IP_ACCESS] Checking IP=%s app_id=%s", ctx.ClientIP, appID)
 
-	ipRule, err := h.ipAccessService.CheckIP(appID, ctx.ClientIP)
+	ipRule, err := h.ipAccessService.CheckIPInMemory(appID, ctx.ClientIP)
 	if err != nil {
 		h.appCfg.LogError("[IP_ACCESS] Failed to check IP: %v", err)
 		ctx.AddTrace(pipeline.StageTrace{Stage: "ip_access_rule", Result: "ERROR", Reason: err.Error()})

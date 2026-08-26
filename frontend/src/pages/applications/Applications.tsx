@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
-import { Plus, Trash2, SquarePen, Globe, Server, ArrowRightLeft, Shield, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, SquarePen, Globe, Server, ArrowRightLeft, Shield, RefreshCw, ExternalLink } from 'lucide-react'
 import type { App } from '@/lib/api-client'
 
 function HealthBadge({ app }: { app: App }) {
@@ -95,6 +95,15 @@ export default function Applications() {
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <Globe className="w-4 h-4 text-muted-foreground" />
                     {app.domain}
+                    <a
+                      href={`https://${app.domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
                   </CardTitle>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-1">

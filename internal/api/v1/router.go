@@ -12,16 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/api/v1/handler"
-	"github.com/vibeswaf/waf/internal/api/v1/middleware"
-	"github.com/vibeswaf/waf/internal/cache"
-	"github.com/vibeswaf/waf/internal/challenge"
-	"github.com/vibeswaf/waf/internal/logger"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	handlers "github.com/vibeswaf/waf/internal/pipeline/handlers"
-	"github.com/vibeswaf/waf/internal/ratelimit"
-	"github.com/vibeswaf/waf/internal/repository"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/api/v1/handler"
+	"github.com/iodesk/VibesWAF/internal/api/v1/middleware"
+	"github.com/iodesk/VibesWAF/internal/cache"
+	"github.com/iodesk/VibesWAF/internal/challenge"
+	"github.com/iodesk/VibesWAF/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	handlers "github.com/iodesk/VibesWAF/internal/pipeline/handlers"
+	"github.com/iodesk/VibesWAF/internal/ratelimit"
+	"github.com/iodesk/VibesWAF/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type Router struct {

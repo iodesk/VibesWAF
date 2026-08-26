@@ -9,16 +9,21 @@ type RateLimitConfig struct {
 	ChallengeSec int    `json:"challenge_sec"`
 }
 
-
-type RateLimitResponse struct {
-	Basic  RateLimitConfig `json:"basic"`
-	Attack RateLimitConfig `json:"attack"`
-	Error  RateLimitConfig `json:"error"`
+type FloodExclude struct {
+	Extensions []string `json:"extensions"`
+	Paths      []string `json:"paths"`
 }
 
+type RateLimitResponse struct {
+	Basic   RateLimitConfig `json:"basic"`
+	Attack  RateLimitConfig `json:"attack"`
+	Error   RateLimitConfig `json:"error"`
+	Exclude FloodExclude    `json:"exclude"`
+}
 
 type RateLimitUpdateRequest struct {
-	Basic  *RateLimitConfig `json:"basic,omitempty"`
-	Attack *RateLimitConfig `json:"attack,omitempty"`
-	Error  *RateLimitConfig `json:"error,omitempty"`
+	Basic   *RateLimitConfig `json:"basic,omitempty"`
+	Attack  *RateLimitConfig `json:"attack,omitempty"`
+	Error   *RateLimitConfig `json:"error,omitempty"`
+	Exclude *FloodExclude    `json:"exclude,omitempty"`
 }

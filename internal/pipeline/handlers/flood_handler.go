@@ -1,13 +1,14 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/ratelimit"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/ratelimit"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type FloodHandler struct {
@@ -60,6 +61,12 @@ func (h *FloodHandler) Handle(ctx *pipeline.Context) error {
 
 	ip := ctx.ClientIP
 	cfg := h.getConfig()
+
+	if h.isExcluded(ctx.Request.URL.Path, cfg) {
+		h.appCfg.LogDebug("[FLOOD] Skipped: path excluded ip=%s path=%s", ip, ctx.Request.URL.Path)
+		ctx.AddTrace(pipeline.StageTrace{Stage: "flood", Result: "SKIP", Reason: "excluded_path"})
+		return nil
+	}
 
 	if h.flood.IsChallenged(ip) {
 		h.appCfg.LogInfo("[FLOOD] IP %s is under flood challenge penalty", ip)
@@ -136,4 +143,18 @@ func (h *FloodHandler) Handle(ctx *pipeline.Context) error {
 	h.appCfg.LogDebug("[FLOOD] Passed ip=%s", ip)
 	ctx.AddTrace(pipeline.StageTrace{Stage: "flood", Result: "PASS"})
 	return nil
+}
+
+func (h *FloodHandler) isExcluded(path string, cfg model.RateLimitConfig) bool {
+	for _, ext := range cfg.Exclude.Extensions {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+	for _, p := range cfg.Exclude.Paths {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }

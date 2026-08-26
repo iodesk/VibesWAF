@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
 )
 
 const maxRegexCache = 500

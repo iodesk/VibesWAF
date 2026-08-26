@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 type CertificateRepository struct {

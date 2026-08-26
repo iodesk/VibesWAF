@@ -8,28 +8,21 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/repository"
 )
 
 type IPReputationService struct {
 	repo         *repository.IPReputationRepository
 	settingsRepo *repository.SettingsRepository
 
-	mu      sync.RWMutex
-	ipMap   map[string]int
-	asnMap  map[uint]int
-	cidrMap []cidrEntry
+	mu       sync.RWMutex
+	ipMap    map[string]int
+	asnMap   map[uint]int
+	cidrTrie *ipTrie
 
-	// cfg is the cached IP reputation config, read via atomic load on the hot
-	// path to avoid a DB query during MaxMind auto-detect scoring.
-	cfg unsafe.Pointer // *model.IPReputationConfig
-}
-
-type cidrEntry struct {
-	network *net.IPNet
-	score   int
+	cfg unsafe.Pointer
 }
 
 func NewIPReputationService(repo *repository.IPReputationRepository, settingsRepo *repository.SettingsRepository) *IPReputationService {
@@ -38,6 +31,7 @@ func NewIPReputationService(repo *repository.IPReputationRepository, settingsRep
 		settingsRepo: settingsRepo,
 		ipMap:        make(map[string]int),
 		asnMap:       make(map[uint]int),
+		cidrTrie:     newIPTrie(),
 	}
 	s.Reload()
 	return s
@@ -59,14 +53,14 @@ func (s *IPReputationService) Reload() {
 
 	ipMap := make(map[string]int)
 	asnMap := make(map[uint]int)
-	var cidrList []cidrEntry
+	trie := newIPTrie()
 
 	for _, e := range entries {
 		switch e.EntryType {
 		case "ip":
 			_, ipNet, err := net.ParseCIDR(e.Value)
 			if err == nil {
-				cidrList = append(cidrList, cidrEntry{network: ipNet, score: e.Score})
+				trie.insert(ipNet, e.Score)
 			} else {
 				ip := net.ParseIP(e.Value)
 				if ip != nil {
@@ -84,11 +78,11 @@ func (s *IPReputationService) Reload() {
 	s.mu.Lock()
 	s.ipMap = ipMap
 	s.asnMap = asnMap
-	s.cidrMap = cidrList
+	s.cidrTrie = trie
 	s.mu.Unlock()
 
-	config.GetAppConfig().LogDebug("[IP_REPUTATION] Loaded %d IP entries, %d CIDR entries, %d ASN entries",
-		len(ipMap), len(cidrList), len(asnMap))
+	config.GetAppConfig().LogDebug("[IP_REPUTATION] Loaded %d IP entries, %d CIDR entries (trie), %d ASN entries",
+		len(ipMap), trie.size(), len(asnMap))
 }
 
 func (s *IPReputationService) LookupIP(ipStr string) (int, bool) {
@@ -104,9 +98,9 @@ func (s *IPReputationService) LookupIP(ipStr string) (int, bool) {
 		return score, true
 	}
 
-	for _, entry := range s.cidrMap {
-		if entry.network.Contains(ip) {
-			return entry.score, true
+	if s.cidrTrie != nil {
+		if score, ok := s.cidrTrie.lookup(ip); ok {
+			return score, true
 		}
 	}
 

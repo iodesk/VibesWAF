@@ -3,7 +3,7 @@ package handler
 import (
 	"fmt"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 

@@ -10,12 +10,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/vibeswaf/waf/internal/cache"
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/repository"
-	"github.com/vibeswaf/waf/internal/scoring"
+	"github.com/iodesk/VibesWAF/internal/cache"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/scoring"
 )
 
 const (
@@ -27,12 +27,21 @@ const (
 	dnsVerifyTimeout = 700 * time.Millisecond
 )
 
-// botState is the hot-path read data swapped atomically on reload.
+type indexedPattern struct {
+	patternLower string
+	patternType  string
+	score        int
+	verifyIP     bool
+	pattern      string
+}
+
 type botState struct {
-	patterns  []model.BotPattern
-	whitelist []model.BotWhitelist
-	botConfig model.BotConfig
-	scorer    *scoring.Scorer
+	patterns      []model.BotPattern
+	knownBots     []string
+	allPatterns   []indexedPattern
+	whitelist     []model.BotWhitelist
+	botConfig     model.BotConfig
+	scorer        *scoring.Scorer
 }
 
 // dnsResult caches a three-step bot DNS verification result.
@@ -96,7 +105,6 @@ func (s *BotDetectionService) loadState() *botState {
 		patterns = nil
 	}
 
-	// Precompute lowercase patterns once so the hot path avoids ToLower per request.
 	for i := range patterns {
 		patterns[i].PatternLower = strings.ToLower(patterns[i].Pattern)
 	}
@@ -115,17 +123,39 @@ func (s *BotDetectionService) loadState() *botState {
 
 	sc := scoring.NewScorerWithConfig(botConfig)
 
-	// First load during init → startup log. Subsequent reloads → debug only.
+	var knownBots []string
+	var allPatterns []indexedPattern
+	for _, p := range patterns {
+		if !p.Enabled {
+			continue
+		}
+		ip := indexedPattern{
+			patternLower: p.PatternLower,
+			patternType:  p.PatternType,
+			score:        p.Score,
+			verifyIP:     p.VerifyIP,
+			pattern:      p.Pattern,
+		}
+		allPatterns = append(allPatterns, ip)
+
+		if p.PatternType == "good_bot" || p.PatternType == "bad_bot" {
+			knownBots = append(knownBots, p.PatternLower)
+		}
+	}
+
 	if atomic.LoadPointer(&s.state) == nil {
-		s.appCfg.LogStartup("BotDetection: %d patterns loaded", len(patterns))
+		s.appCfg.LogStartup("BotDetection: %d patterns loaded (%d known bots, %d active)",
+			len(patterns), len(knownBots), len(allPatterns))
 	} else {
 		s.appCfg.LogDebug("[BotDetection] Reloaded %d patterns, %d whitelist entries", len(patterns), len(whitelist))
 	}
 	return &botState{
-		patterns:  patterns,
-		whitelist: whitelist,
-		botConfig: botConfig,
-		scorer:    sc,
+		patterns:    patterns,
+		knownBots:   knownBots,
+		allPatterns: allPatterns,
+		whitelist:   whitelist,
+		botConfig:   botConfig,
+		scorer:      sc,
 	}
 }
 
@@ -227,7 +257,7 @@ func (s *BotDetectionService) AnalyzeRequest(ctx *pipeline.Context, threshold in
 	s.appCfg.LogDebug("[BOT] headerScore=%d uaScore=%d refererScore=%d",
 		headerScore.TotalScore, uaScore.TotalScore, refererScore.TotalScore)
 
-	if s.isKnownBotUA(ctx.Request.UserAgent(), st.patterns) {
+	if s.isKnownBotUA(ctx.Request.UserAgent(), st) {
 		ctx.IsKnownBot = true
 	} else {
 		ctx.IsKnownBot = false
@@ -258,29 +288,31 @@ func (s *BotDetectionService) AnalyzeRequest(ctx *pipeline.Context, threshold in
 	s.appCfg.LogDebug("[BOT] Potential good bot: %s verifyIP=%v score=%d patternScore=%d", potentialGoodBot, verifyIP, finalScore.TotalScore, patternScore)
 
 	if verifyIP {
-		result := s.verifyBotIPCached(ctx.ClientIP, potentialGoodBot)
-		if result.verified {
-			// All three steps passed — apply trust reduction.
-			finalScore.TotalScore = 0
-			finalScore.Action = ""
-			finalScore.Reasons = nil
-			finalScore.Add("verified_good_bot:"+potentialGoodBot, goodBotTrust)
-			finalScore.Evidence = result.evidence
-			ctx.IsKnownBot = true
-			ctx.BotType = "good_bot"
-			s.appCfg.LogInfo("[BOT] Verified good bot: %s IP=%s trust=%d", potentialGoodBot, ctx.ClientIP, goodBotTrust)
-		} else {
-			// Penalise using the pattern's own score.
-			// Score 0 means the user considers this bot non-threatening even if fake —
-			// no penalty added, just no trust reduction granted.
-			// forward_dns and reverse_dns failures both use the same pattern score;
-			// the distinction is logged for audit but does not change the penalty.
+		if !st.botConfig.DNSVerification {
+			s.appCfg.LogDebug("[BOT] DNS verification disabled, skipping for IP=%s pattern=%s", ctx.ClientIP, potentialGoodBot)
 			if patternScore > 0 {
-				finalScore.Add("fake_bot:"+potentialGoodBot+":"+result.failedStep, patternScore)
+				finalScore.Add("unverified_bot:"+potentialGoodBot, patternScore)
 				finalScore.Action = st.scorer.DetermineAction(finalScore.TotalScore, thresholdVal, actionVal)
 			}
-			finalScore.Evidence = result.evidence
-			s.appCfg.LogWarn("[BOT] Fake bot: UA=%s IP=%s step=%s penalty=%d", ctx.Request.UserAgent(), ctx.ClientIP, result.failedStep, patternScore)
+		} else {
+			result := s.verifyBotIPCached(ctx.ClientIP, potentialGoodBot)
+			if result.verified {
+				finalScore.TotalScore = 0
+				finalScore.Action = ""
+				finalScore.Reasons = nil
+				finalScore.Add("verified_good_bot:"+potentialGoodBot, goodBotTrust)
+				finalScore.Evidence = result.evidence
+				ctx.IsKnownBot = true
+				ctx.BotType = "good_bot"
+				s.appCfg.LogInfo("[BOT] Verified good bot: %s IP=%s trust=%d", potentialGoodBot, ctx.ClientIP, goodBotTrust)
+			} else {
+				if patternScore > 0 {
+					finalScore.Add("fake_bot:"+potentialGoodBot+":"+result.failedStep, patternScore)
+					finalScore.Action = st.scorer.DetermineAction(finalScore.TotalScore, thresholdVal, actionVal)
+				}
+				finalScore.Evidence = result.evidence
+				s.appCfg.LogWarn("[BOT] Fake bot: UA=%s IP=%s step=%s penalty=%d", ctx.Request.UserAgent(), ctx.ClientIP, result.failedStep, patternScore)
+			}
 		}
 	} else {
 		if finalScore.TotalScore <= 5 {
@@ -324,27 +356,18 @@ func (s *BotDetectionService) analyzeBehavior(ctx *pipeline.Context, st *botStat
 
 	if ua != "" {
 		isKnownBrowser := isKnownBrowserUA(ua)
-		isKnownBot := s.isKnownBotUA(ua, st.patterns)
+		isKnownBot := s.isKnownBotUA(ua, st)
 		if !isKnownBrowser && !isKnownBot {
 			ctx.UnknownBrowserBot = true
 		}
 	}
 }
 
-func (s *BotDetectionService) isKnownBotUA(ua string, patterns []model.BotPattern) bool {
+func (s *BotDetectionService) isKnownBotUA(ua string, st *botState) bool {
 	uaLower := strings.ToLower(ua)
-	for _, pattern := range patterns {
-		if !pattern.Enabled {
-			continue
-		}
-		if pattern.PatternType == "good_bot" || pattern.PatternType == "bad_bot" {
-			patternLower := pattern.PatternLower
-			if patternLower == "" {
-				patternLower = strings.ToLower(pattern.Pattern)
-			}
-			if strings.Contains(uaLower, patternLower) {
-				return true
-			}
+	for _, pattern := range st.knownBots {
+		if strings.Contains(uaLower, pattern) {
+			return true
 		}
 	}
 	return false

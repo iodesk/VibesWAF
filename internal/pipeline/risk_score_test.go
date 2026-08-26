@@ -11,11 +11,11 @@ func TestRiskScoreAdd(t *testing.T) {
 	if rs.Total != 55 {
 		t.Fatalf("Total = %d, want 55", rs.Total)
 	}
-	if rs.ByCategory[ScoreCategoryWAFAnomaly] != 40 {
-		t.Fatalf("WAF category = %d, want 40", rs.ByCategory[ScoreCategoryWAFAnomaly])
+	if rs.get(ScoreCategoryWAFAnomaly) != 40 {
+		t.Fatalf("WAF category = %d, want 40", rs.get(ScoreCategoryWAFAnomaly))
 	}
-	if rs.ByCategory[ScoreCategoryIPReputation] != 15 {
-		t.Fatalf("IP category = %d, want 15", rs.ByCategory[ScoreCategoryIPReputation])
+	if rs.get(ScoreCategoryIPReputation) != 15 {
+		t.Fatalf("IP category = %d, want 15", rs.get(ScoreCategoryIPReputation))
 	}
 	if len(rs.Entries) != 3 {
 		t.Fatalf("Entries = %d, want 3", len(rs.Entries))
@@ -27,8 +27,8 @@ func TestRiskScoreApplyCap(t *testing.T) {
 	rs.Add(ScoreCategoryWAFAnomaly, "many", 60)
 	rs.ApplyCap(ScoreCategoryWAFAnomaly, 40)
 
-	if rs.ByCategory[ScoreCategoryWAFAnomaly] != 40 {
-		t.Fatalf("capped category = %d, want 40", rs.ByCategory[ScoreCategoryWAFAnomaly])
+	if rs.get(ScoreCategoryWAFAnomaly) != 40 {
+		t.Fatalf("capped category = %d, want 40", rs.get(ScoreCategoryWAFAnomaly))
 	}
 	if rs.Total != 40 {
 		t.Fatalf("Total after cap = %d, want 40 (overflow 20 removed)", rs.Total)
@@ -40,8 +40,8 @@ func TestRiskScoreApplyCapNoOp(t *testing.T) {
 	rs.Add(ScoreCategoryBotDetection, "bot", 20)
 	rs.ApplyCap(ScoreCategoryBotDetection, 30)
 
-	if rs.Total != 20 || rs.ByCategory[ScoreCategoryBotDetection] != 20 {
-		t.Fatalf("under-cap should be unchanged, got total=%d cat=%d", rs.Total, rs.ByCategory[ScoreCategoryBotDetection])
+	if rs.Total != 20 || rs.get(ScoreCategoryBotDetection) != 20 {
+		t.Fatalf("under-cap should be unchanged, got total=%d cat=%d", rs.Total, rs.get(ScoreCategoryBotDetection))
 	}
 }
 
@@ -50,8 +50,8 @@ func TestRiskScoreApplyMultiplier(t *testing.T) {
 	rs.Add(ScoreCategoryProtocolAnomaly, "anomaly", 20)
 	rs.ApplyMultiplier(ScoreCategoryProtocolAnomaly, 1.5)
 
-	if rs.ByCategory[ScoreCategoryProtocolAnomaly] != 30 {
-		t.Fatalf("multiplied category = %d, want 30", rs.ByCategory[ScoreCategoryProtocolAnomaly])
+	if rs.get(ScoreCategoryProtocolAnomaly) != 30 {
+		t.Fatalf("multiplied category = %d, want 30", rs.get(ScoreCategoryProtocolAnomaly))
 	}
 	if rs.Total != 30 {
 		t.Fatalf("Total after multiplier = %d, want 30", rs.Total)
@@ -93,7 +93,6 @@ func TestRiskScoreClampTotal(t *testing.T) {
 }
 
 func TestRiskScoreTrustReductionFlow(t *testing.T) {
-	// Trust is a negative contribution; total can go below zero then clamp.
 	rs := NewRiskScore()
 	rs.Add(ScoreCategoryBotDetection, "suspicious", 20)
 	rs.Add(ScoreCategoryTrust, "challenge_passed", -30)

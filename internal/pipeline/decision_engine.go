@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 type DecisionEngine struct {
@@ -68,13 +68,24 @@ func (e *DecisionEngine) buildReason(ctx *Context, score int) string {
 		return fmt.Sprintf("risk_score:%d", score)
 	}
 
-	parts := make([]string, 0, len(ctx.RiskScore.ByCategory)+1)
+	parts := make([]string, 0, 6)
 	parts = append(parts, fmt.Sprintf("total:%d", score))
 
-	for cat, catScore := range ctx.RiskScore.ByCategory {
-		if catScore != 0 {
-			parts = append(parts, fmt.Sprintf("%s:%d", cat, catScore))
-		}
+	bc := ctx.RiskScore.ByCategory
+	if bc.IPReputation != 0 {
+		parts = append(parts, fmt.Sprintf("ip_reputation:%d", bc.IPReputation))
+	}
+	if bc.BotDetection != 0 {
+		parts = append(parts, fmt.Sprintf("bot_detection:%d", bc.BotDetection))
+	}
+	if bc.WAFAnomaly != 0 {
+		parts = append(parts, fmt.Sprintf("waf_anomaly:%d", bc.WAFAnomaly))
+	}
+	if bc.ProtocolAnomaly != 0 {
+		parts = append(parts, fmt.Sprintf("protocol_anomaly:%d", bc.ProtocolAnomaly))
+	}
+	if bc.Trust != 0 {
+		parts = append(parts, fmt.Sprintf("trust:%d", bc.Trust))
 	}
 
 	return strings.Join(parts, "|")

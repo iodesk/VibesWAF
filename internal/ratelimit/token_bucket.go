@@ -1,16 +1,15 @@
 package ratelimit
 
 import (
-	"crypto/sha256"
-	"fmt"
+	"hash/fnv"
 	"sync"
 	"time"
 )
 
 const (
-	// MaxEntries is the hard cap on tracked keys.
-	// At ~180 bytes per entry this caps memory at ~90MB.
-	MaxEntries = 500_000
+	MaxEntries       = 500_000
+	rateLimitShards  = 256
+	maxPerShard      = MaxEntries / rateLimitShards
 )
 
 type bucket struct {
@@ -21,28 +20,37 @@ type bucket struct {
 	lastAccess time.Time
 }
 
-// RateLimiter manages per-key token buckets in a single flat map
-// with one cleanup goroutine. Hard-capped at MaxEntries.
+type rateLimitShard struct {
+	mu      sync.Mutex
+	buckets map[string]*bucket
+}
+
 type RateLimiter struct {
-	mu        sync.Mutex
-	buckets   map[string]*bucket
+	shards    [rateLimitShards]*rateLimitShard
 	bucketTTL time.Duration
-	maxSize   int
 	stopCh    chan struct{}
 }
 
 func NewRateLimiter() *RateLimiter {
 	rl := &RateLimiter{
-		buckets:   make(map[string]*bucket),
 		bucketTTL: 10 * time.Minute,
-		maxSize:   MaxEntries,
 		stopCh:    make(chan struct{}),
+	}
+	for i := range rl.shards {
+		rl.shards[i] = &rateLimitShard{
+			buckets: make(map[string]*bucket),
+		}
 	}
 	go rl.cleanupLoop()
 	return rl
 }
 
-// Stop terminates the cleanup goroutine.
+func (rl *RateLimiter) shardFor(key string) *rateLimitShard {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return rl.shards[h.Sum32()%rateLimitShards]
+}
+
 func (rl *RateLimiter) Stop() {
 	select {
 	case <-rl.stopCh:
@@ -65,21 +73,20 @@ func (rl *RateLimiter) cleanupLoop() {
 }
 
 func (rl *RateLimiter) cleanup() {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
 	now := time.Now()
-	for key, b := range rl.buckets {
-		if now.Sub(b.lastAccess) > rl.bucketTTL {
-			delete(rl.buckets, key)
+	for _, sh := range rl.shards {
+		sh.mu.Lock()
+		for key, b := range sh.buckets {
+			if now.Sub(b.lastAccess) > rl.bucketTTL {
+				delete(sh.buckets, key)
+			}
 		}
+		sh.mu.Unlock()
 	}
 }
 
-// evictOldest removes the oldest-accessed entries to make room.
-// Must be called with mu held.
-func (rl *RateLimiter) evictOldest() {
-	// Evict 10% of max to avoid evicting on every single insert.
-	evictCount := rl.maxSize / 10
+func (sh *rateLimitShard) evictOldest() {
+	evictCount := maxPerShard / 10
 	if evictCount < 1 {
 		evictCount = 1
 	}
@@ -89,7 +96,7 @@ func (rl *RateLimiter) evictOldest() {
 		var oldestTime time.Time
 		first := true
 
-		for k, b := range rl.buckets {
+		for k, b := range sh.buckets {
 			if first || b.lastAccess.Before(oldestTime) {
 				oldestKey = k
 				oldestTime = b.lastAccess
@@ -98,25 +105,23 @@ func (rl *RateLimiter) evictOldest() {
 		}
 
 		if oldestKey != "" {
-			delete(rl.buckets, oldestKey)
+			delete(sh.buckets, oldestKey)
 		}
 	}
 }
 
-// Allow checks if a request for the given key is allowed.
-// capacity = max tokens, refillRate = tokens per second.
 func (rl *RateLimiter) Allow(key string, capacity int, refillRate float64) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
+	sh := rl.shardFor(key)
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
 
 	now := time.Now()
 	cap := float64(capacity)
 
-	b, exists := rl.buckets[key]
+	b, exists := sh.buckets[key]
 	if !exists {
-		// Hard cap: evict oldest if at limit.
-		if len(rl.buckets) >= rl.maxSize {
-			rl.evictOldest()
+		if len(sh.buckets) >= maxPerShard {
+			sh.evictOldest()
 		}
 
 		b = &bucket{
@@ -126,7 +131,7 @@ func (rl *RateLimiter) Allow(key string, capacity int, refillRate float64) bool 
 			lastRefill: now,
 			lastAccess: now,
 		}
-		rl.buckets[key] = b
+		sh.buckets[key] = b
 	}
 
 	b.lastAccess = now
@@ -152,17 +157,14 @@ func (rl *RateLimiter) Allow(key string, capacity int, refillRate float64) bool 
 	return false
 }
 
-// Size returns the current number of tracked keys.
 func (rl *RateLimiter) Size() int {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	return len(rl.buckets)
-}
-
-func GenerateKey(ip, userAgent string) string {
-	hash := sha256.Sum256([]byte(userAgent))
-	uaHash := fmt.Sprintf("%x", hash[:8])
-	return fmt.Sprintf("%s:%s", ip, uaHash)
+	total := 0
+	for _, sh := range rl.shards {
+		sh.mu.Lock()
+		total += len(sh.buckets)
+		sh.mu.Unlock()
+	}
+	return total
 }
 
 func min(a, b float64) float64 {

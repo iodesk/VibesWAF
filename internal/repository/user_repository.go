@@ -3,7 +3,7 @@ package repository
 import (
 	"database/sql"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 

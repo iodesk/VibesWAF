@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/vibeswaf/waf/internal/metrics"
+	"github.com/iodesk/VibesWAF/internal/metrics"
 )
 
 

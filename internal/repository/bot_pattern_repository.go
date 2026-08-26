@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/ratelimit"
+	"github.com/iodesk/VibesWAF/internal/ratelimit"
 )
 
 type TestHandler struct {

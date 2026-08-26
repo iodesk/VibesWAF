@@ -1,7 +1,7 @@
 package pipeline
 
 import (
-	"github.com/vibeswaf/waf/internal/pages"
+	"github.com/iodesk/VibesWAF/internal/pages"
 )
 
 

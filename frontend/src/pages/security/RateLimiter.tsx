@@ -15,7 +15,10 @@ import {
   Shield,
   Clock,
   Activity,
-  ShieldAlert
+  ShieldAlert,
+  Plus,
+  FileCode,
+  FolderOpen
 } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { useRateLimit, useUpdateRateLimit, useRateLimitStats } from '@/hooks/useApi'
@@ -35,6 +38,9 @@ export default function RateLimiter() {
     action: 'block',
     challenge_sec: 0,
   })
+
+  const [newExtension, setNewExtension] = useState('')
+  const [newPath, setNewPath] = useState('')
 
   const handleToggle = async (type: LimitType) => {
     if (!rateLimitData) return
@@ -86,6 +92,82 @@ export default function RateLimiter() {
     } catch (error: any) {
       const errorMessage = error?.message || 'Failed to update rate limit'
       addToast(errorMessage, 'error')
+    }
+  }
+
+  const addExtension = async () => {
+    if (!rateLimitData || !newExtension.trim()) return
+    const ext = newExtension.trim().startsWith('.') ? newExtension.trim() : `.${newExtension.trim()}`
+    const current = rateLimitData.exclude?.extensions || []
+    if (current.includes(ext)) {
+      addToast('Extension already exists', 'error')
+      return
+    }
+    try {
+      await updateRateLimit.mutateAsync({
+        exclude: {
+          extensions: [...current, ext],
+          paths: rateLimitData.exclude?.paths || [],
+        },
+      })
+      addToast(`Added ${ext} to exclude list`, 'success')
+      setNewExtension('')
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to add extension', 'error')
+    }
+  }
+
+  const removeExtension = async (ext: string) => {
+    if (!rateLimitData) return
+    const current = rateLimitData.exclude?.extensions || []
+    try {
+      await updateRateLimit.mutateAsync({
+        exclude: {
+          extensions: current.filter(e => e !== ext),
+          paths: rateLimitData.exclude?.paths || [],
+        },
+      })
+      addToast(`Removed ${ext} from exclude list`, 'success')
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to remove extension', 'error')
+    }
+  }
+
+  const addPath = async () => {
+    if (!rateLimitData || !newPath.trim()) return
+    const p = newPath.trim()
+    const current = rateLimitData.exclude?.paths || []
+    if (current.includes(p)) {
+      addToast('Path already exists', 'error')
+      return
+    }
+    try {
+      await updateRateLimit.mutateAsync({
+        exclude: {
+          extensions: rateLimitData.exclude?.extensions || [],
+          paths: [...current, p],
+        },
+      })
+      addToast(`Added ${p} to exclude list`, 'success')
+      setNewPath('')
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to add path', 'error')
+    }
+  }
+
+  const removePath = async (p: string) => {
+    if (!rateLimitData) return
+    const current = rateLimitData.exclude?.paths || []
+    try {
+      await updateRateLimit.mutateAsync({
+        exclude: {
+          extensions: rateLimitData.exclude?.extensions || [],
+          paths: current.filter(path => path !== p),
+        },
+      })
+      addToast(`Removed ${p} from exclude list`, 'success')
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to remove path', 'error')
     }
   }
 
@@ -495,6 +577,92 @@ export default function RateLimiter() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Exclude from Flood Counting */}
+      <Card className="shadow-none border-border overflow-hidden">
+        <CardHeader className="py-5 border-b border-border/50 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-bold">Exclude from Flood Counting</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Paths and extensions listed here will not be counted by the basic flood protector.</p>
+        </CardHeader>
+        <CardContent className="p-6 space-y-6">
+          {/* Extensions */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FileCode className="w-3.5 h-3.5 text-muted-foreground" />
+              <Label className="text-xs font-bold text-foreground">File Extensions</Label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(rateLimitData?.exclude?.extensions || []).map((ext) => (
+                <Badge key={ext} variant="secondary" className="gap-1.5 pr-1 font-mono text-xs">
+                  {ext}
+                  <button
+                    onClick={() => removeExtension(ext)}
+                    className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+              {(!rateLimitData?.exclude?.extensions || rateLimitData.exclude.extensions.length === 0) && (
+                <span className="text-xs text-muted-foreground italic">No extensions excluded</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder=".js"
+                value={newExtension}
+                onChange={(e) => setNewExtension(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addExtension()}
+                className="w-32 h-8 text-xs font-mono"
+              />
+              <Button variant="outline" size="sm" onClick={addExtension} className="h-8 gap-1">
+                <Plus className="w-3 h-3" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Paths */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-3.5 h-3.5 text-muted-foreground" />
+              <Label className="text-xs font-bold text-foreground">Path Prefixes</Label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(rateLimitData?.exclude?.paths || []).map((p) => (
+                <Badge key={p} variant="secondary" className="gap-1.5 pr-1 font-mono text-xs">
+                  {p}
+                  <button
+                    onClick={() => removePath(p)}
+                    className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+              {(!rateLimitData?.exclude?.paths || rateLimitData.exclude.paths.length === 0) && (
+                <span className="text-xs text-muted-foreground italic">No paths excluded</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="/api/realtime/"
+                value={newPath}
+                onChange={(e) => setNewPath(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addPath()}
+                className="w-48 h-8 text-xs font-mono"
+              />
+              <Button variant="outline" size="sm" onClick={addPath} className="h-8 gap-1">
+                <Plus className="w-3 h-3" />
+                Add
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

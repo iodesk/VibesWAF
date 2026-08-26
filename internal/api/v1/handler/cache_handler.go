@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/vibeswaf/waf/internal/cache"
+	"github.com/iodesk/VibesWAF/internal/cache"
 )
 
 type CacheHandler struct {

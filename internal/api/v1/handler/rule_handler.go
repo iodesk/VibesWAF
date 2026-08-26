@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/api/v1/dto"
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/domain/rule"
-	"github.com/vibeswaf/waf/internal/logger"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/api/v1/dto"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/domain/rule"
+	"github.com/iodesk/VibesWAF/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 

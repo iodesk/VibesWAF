@@ -3,8 +3,8 @@ package repository
 import (
 	"database/sql"
 
-	"github.com/vibeswaf/waf/internal/domain/app"
-	"github.com/vibeswaf/waf/internal/domain/rule"
+	"github.com/iodesk/VibesWAF/internal/domain/app"
+	"github.com/iodesk/VibesWAF/internal/domain/rule"
 )
 
 

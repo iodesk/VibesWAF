@@ -14,20 +14,20 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/vibeswaf/waf/internal/acme"
-	v1 "github.com/vibeswaf/waf/internal/api/v1"
-	"github.com/vibeswaf/waf/internal/cache"
-	"github.com/vibeswaf/waf/internal/challenge"
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/logger"
-	"github.com/vibeswaf/waf/internal/migration"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/pipeline/handlers"
-	"github.com/vibeswaf/waf/internal/ratelimit"
-	"github.com/vibeswaf/waf/internal/repository"
-	"github.com/vibeswaf/waf/internal/service"
-	"github.com/vibeswaf/waf/internal/stream"
+	"github.com/iodesk/VibesWAF/internal/acme"
+	v1 "github.com/iodesk/VibesWAF/internal/api/v1"
+	"github.com/iodesk/VibesWAF/internal/cache"
+	"github.com/iodesk/VibesWAF/internal/challenge"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/migration"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/pipeline/handlers"
+	"github.com/iodesk/VibesWAF/internal/ratelimit"
+	"github.com/iodesk/VibesWAF/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/service"
+	"github.com/iodesk/VibesWAF/internal/stream"
 )
 
 func main() {
@@ -78,7 +78,7 @@ func main() {
 		os.Getenv("CLICKHOUSE_PASSWORD"),
 	)
 	if err != nil {
-		appCfg.LogStartup("ClickHouse: unavailable (%v) -- logging disabled", err)
+		appCfg.LogStartup("ClickHouse: unavailable (%v) -- logging disabled, reconnect in background", err)
 	} else {
 		defer clickhouseLogger.Close()
 		appCfg.LogStartup("ClickHouse: ok")
@@ -118,6 +118,7 @@ func main() {
 
 	ruleService := service.NewRuleService(repos.Rule, 5*time.Minute)
 	ipAccessService := service.NewIPAccessService(repos.IPAccess)
+	defer ipAccessService.Stop()
 	ipReputationService := service.NewIPReputationService(repos.IPReputation, repos.Settings)
 	certificateService := service.NewCertificateService(repos.Certificate, acmeService)
 

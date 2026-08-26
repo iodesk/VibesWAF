@@ -1,0 +1,153 @@
+worker_processes auto;
+worker_rlimit_nofile 65535;
+error_log /var/log/nginx/error.log warn;
+pid /run/nginx.pid;
+user nginx;
+
+events {
+    worker_connections 4096;
+    multi_accept on;
+    use epoll;
+}
+
+stream {
+    include /etc/nginx/stream.d/*.conf;
+}
+
+http {
+    include mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" ja4=$ssl_ja4 ja4s=$ssl_ja4s ja4h=$http_ja4h';
+
+    access_log /var/log/nginx/access.log main;
+
+    ssl_dynamic_certificate on;
+    ssl_dynamic_certificate_path /etc/nginx/ssl;
+    ja4_enable on;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    client_body_buffer_size 128K;
+    client_header_buffer_size 128k;
+    client_max_body_size 64M;
+    large_client_header_buffers 4 128k;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    server_names_hash_bucket_size 128;
+    server_tokens off;
+    port_in_redirect off;
+
+    map $scheme $fastcgi_https {
+        default off;
+        https on;
+    }
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache builtin:1000 shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_ciphers EECDH+AESGCM:EDH+AESGCM;
+    ssl_prefer_server_ciphers on;
+    ssl_conf_command Options KTLS;
+    ssl_stapling off;
+    ssl_stapling_verify off;
+    ssl_dhparam /etc/nginx/ssl/dhparams.pem;
+
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+    set_real_ip_from 2400:cb00::/32;
+    set_real_ip_from 2606:4700::/32;
+    set_real_ip_from 2803:f800::/32;
+    set_real_ip_from 2405:b500::/32;
+    set_real_ip_from 2405:8100::/32;
+    set_real_ip_from 2a06:98c0::/29;
+    set_real_ip_from 2c0f:f248::/32;
+
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+
+    upstream waf_backend {
+        server 127.0.0.1:3044;
+        keepalive 64;
+    }
+
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        return 444;
+    }
+
+    server {
+        listen 80;
+        server_name ~.;
+
+        location /.well-known/acme-challenge/ {
+            proxy_pass http://127.0.0.1:8080;
+        }
+
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    server {
+        listen 443 ssl default_server;
+        listen [::]:443 ssl default_server;
+        http2 on;
+        server_name _;
+
+        ssl_dynamic_certificate_default  /etc/nginx/ssl/default;
+        ssl_dynamic_certificate_cache 10000;
+        ssl_dynamic_certificate_wildcard on;
+        ssl_dynamic_negative_cache_ttl 5s;
+
+        location = /ja4 {
+            default_type text/plain;
+            return 200 "$ssl_ja4\n$ssl_ja4s\n$http_ja4h\n";
+        }
+
+        location / {
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-JA4 $ssl_ja4;
+            proxy_set_header X-JA4H "ja4h_$http_ja4h";
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+
+            proxy_connect_timeout 3s;
+            proxy_send_timeout 600s;
+            proxy_read_timeout 600s;
+
+            proxy_pass http://waf_backend;
+        }
+    }
+}

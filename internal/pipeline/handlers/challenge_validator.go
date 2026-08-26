@@ -5,25 +5,40 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type ChallengeValidator struct {
 	botService *service.BotDetectionService
 	appCfg     *config.AppConfig
+	secret     string
+	hmacPool   sync.Pool
 }
 
 func NewChallengeValidator(botService *service.BotDetectionService) *ChallengeValidator {
+	secret := os.Getenv("WAF_SECRET")
+	if secret == "" {
+		secret = "fallback_secret"
+	}
+	secretBytes := []byte(secret)
 	return &ChallengeValidator{
 		botService: botService,
 		appCfg:     config.GetAppConfig(),
+		secret:     secret,
+		hmacPool: sync.Pool{
+			New: func() interface{} {
+				return hmac.New(sha256.New, secretBytes)
+			},
+		},
 	}
 }
 
@@ -92,11 +107,6 @@ func (h *ChallengeValidator) verifyCookie(cookieValue, clientIP, userAgent strin
 		return 0, false
 	}
 
-	secret := os.Getenv("WAF_SECRET")
-	if secret == "" {
-		secret = "fallback_secret"
-	}
-
 	// Verify HMAC with trust_level included in payload
 	var payload string
 	if len(parts) == 3 {
@@ -106,9 +116,11 @@ func (h *ChallengeValidator) verifyCookie(cookieValue, clientIP, userAgent strin
 		payload = fmt.Sprintf("%s:%s:%d", clientIP, userAgent, timestamp)
 	}
 
-	hm := hmac.New(sha256.New, []byte(secret))
+	hm := h.hmacPool.Get().(hash.Hash)
+	hm.Reset()
 	hm.Write([]byte(payload))
 	expectedFull := hex.EncodeToString(hm.Sum(nil))
+	h.hmacPool.Put(hm)
 	expectedSignature := expectedFull
 	if len(signature) == 32 {
 		expectedSignature = expectedFull[:32]

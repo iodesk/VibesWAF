@@ -1,4 +1,4 @@
-module github.com/vibeswaf/waf
+module github.com/iodesk/VibesWAF
 
 go 1.25.0
 
@@ -10,6 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/oschwald/geoip2-golang v1.13.0
+	github.com/oschwald/maxminddb-golang v1.13.0
 	github.com/redis/go-redis/v9 v9.5.1
 	golang.org/x/crypto v0.50.0
 )
@@ -29,9 +30,7 @@ require (
 	github.com/kaptinlin/go-i18n v0.1.4 // indirect
 	github.com/kaptinlin/jsonschema v0.4.6 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
-	github.com/leanovate/gopter v0.2.11 // indirect
 	github.com/magefile/mage v1.17.0 // indirect
-	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/petar-dambovaliev/aho-corasick v0.0.0-20250424160509-463d218d4745 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
@@ -50,6 +49,5 @@ require (
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	pgregory.net/rapid v1.3.0 // indirect
 	rsc.io/binaryregexp v0.2.0 // indirect
 )

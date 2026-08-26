@@ -44,6 +44,7 @@ type BotConfig struct {
 	Rules             map[string]int     `json:"rules"`
 	Challenge         ChallengeConfig    `json:"challenge"`
 	TrustLevels       ChallengeTrustLevel `json:"trust_levels"`
+	DNSVerification   bool               `json:"dns_verification"`
 }
 
 func DefaultBotConfig() BotConfig {
@@ -52,6 +53,7 @@ func DefaultBotConfig() BotConfig {
 		Action:            "challenge",
 		ChallengeDuration: 3700,
 		ChallengeWait:     30,
+		DNSVerification:   true,
 		Rules: map[string]int{
 			"missing_user_agent":         10,
 			"short_user_agent":           8,
@@ -108,10 +110,16 @@ func DefaultWAFConfig() WAFConfig {
 	}
 }
 
+type FloodExclude struct {
+	Extensions []string `json:"extensions"`
+	Paths      []string `json:"paths"`
+}
+
 type RateLimitConfig struct {
-	Basic  RateLimitProfile `json:"basic"`
-	Attack RateLimitProfile `json:"attack"`
-	Error  RateLimitProfile `json:"error"`
+	Basic   RateLimitProfile `json:"basic"`
+	Attack  RateLimitProfile `json:"attack"`
+	Error   RateLimitProfile `json:"error"`
+	Exclude FloodExclude     `json:"exclude"`
 }
 
 func DefaultRateLimitConfig() RateLimitConfig {

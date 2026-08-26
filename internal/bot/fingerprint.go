@@ -1,36 +1,57 @@
 package bot
 
 import (
-	"crypto/sha1"
 	"fmt"
+	"hash/fnv"
 	"net/http"
-	"sort"
-	"strings"
 )
 
-// GenerateFingerprint produces a SHA-1 hash of the most discriminating
-// HTTP request headers. It is stored in ctx.HTTPFingerprint
-// by the WAF handler so downstream scorers can use it without re-computing.
-func GenerateFingerprint(r *http.Request) string {
-	importantHeaders := []string{
-		"Accept",
-		"Accept-Encoding",
-		"Accept-Language",
-		"User-Agent",
-		"Sec-Fetch-Site",
-		"Sec-Fetch-Mode",
-		"Sec-Fetch-Dest",
-	}
+var sortedHeaders = []string{
+	"Accept",
+	"Accept-Encoding",
+	"Accept-Language",
+	"Sec-Fetch-Dest",
+	"Sec-Fetch-Mode",
+	"Sec-Fetch-Site",
+	"User-Agent",
+}
 
-	var parts []string
-	for _, h := range importantHeaders {
-		if val := r.Header.Get(h); val != "" {
-			parts = append(parts, h+":"+val)
+var sep = []byte{'|'}
+var colon = []byte{':'}
+
+func GenerateFingerprint(r *http.Request) string {
+	h := fnv.New64a()
+
+	for _, name := range sortedHeaders {
+		if val := r.Header.Get(name); val != "" {
+			_, _ = h.Write([]byte(name))
+			_, _ = h.Write(colon)
+			_, _ = h.Write([]byte(val))
+			_, _ = h.Write(sep)
 		}
 	}
 
-	sort.Strings(parts)
-	combined := strings.Join(parts, "|")
-	hash := sha1.Sum([]byte(combined)) //nolint:gosec
-	return fmt.Sprintf("%x", hash)
+	if ja4 := r.Header.Get("X-JA4"); ja4 != "" {
+		_, _ = h.Write([]byte("ja4:"))
+		_, _ = h.Write([]byte(ja4))
+		_, _ = h.Write(sep)
+	}
+	if ja4h := r.Header.Get("X-JA4H"); ja4h != "" {
+		_, _ = h.Write([]byte("ja4h:"))
+		_, _ = h.Write([]byte(ja4h))
+		_, _ = h.Write(sep)
+	}
+
+	_, _ = h.Write([]byte(fmt.Sprintf("http_version:%d.%d|", r.ProtoMajor, r.ProtoMinor)))
+
+	if r.TLS != nil {
+		_, _ = h.Write([]byte(fmt.Sprintf("tls_version:%d|", r.TLS.Version)))
+		if r.TLS.NegotiatedProtocol != "" {
+			_, _ = h.Write([]byte("alpn:"))
+			_, _ = h.Write([]byte(r.TLS.NegotiatedProtocol))
+			_, _ = h.Write(sep)
+		}
+	}
+
+	return fmt.Sprintf("%016x", h.Sum64())
 }

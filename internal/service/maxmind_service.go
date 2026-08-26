@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/vibeswaf/waf/internal/config"
+	"github.com/iodesk/VibesWAF/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,9 +137,8 @@ func (s *MaxMindService) Lookup(ipStr string) (*GeoIPResult, error) {
 
 	result := &GeoIPResult{}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	if s.countryDB != nil {
 		record, err := s.countryDB.Country(ip)
@@ -149,35 +148,17 @@ func (s *MaxMindService) Lookup(ipStr string) (*GeoIPResult, error) {
 		}
 	}
 
-
 	if s.asnDB != nil {
 		record, err := s.asnDB.ASN(ip)
 		if err == nil {
 			result.ASN = record.AutonomousSystemNumber
 			result.ASNOrg = record.AutonomousSystemOrganization
-			
-			if s.asnOrgMap == nil {
-				s.asnOrgMap = make(map[uint]string)
-			}
-			s.asnOrgMap[result.ASN] = result.ASNOrg
-			
-			if s.datacenterASNs == nil {
-				s.datacenterASNs = make(map[uint]bool)
-			}
-			
-			if _, exists := s.datacenterASNs[result.ASN]; !exists {
-				isDatacenter := isDatacenterOrg(result.ASNOrg)
-				s.datacenterASNs[result.ASN] = isDatacenter
-				result.IsDatacenter = isDatacenter
-				
-				config.GetAppConfig().LogDebug("[MaxMind] ASN lookup: %d (%s) - IsDatacenter: %v", result.ASN, result.ASNOrg, isDatacenter)
-				
-				if isDatacenter {
-					config.GetAppConfig().LogDebug("[MaxMind] Detected datacenter ASN: %d (%s)", result.ASN, result.ASNOrg)
-				}
-			} else {
+
+			if s.datacenterASNs != nil {
 				result.IsDatacenter = s.datacenterASNs[result.ASN]
-				config.GetAppConfig().LogDebug("[MaxMind] Cached ASN lookup: %d - IsDatacenter: %v", result.ASN, result.IsDatacenter)
+			}
+			if !result.IsDatacenter && result.ASNOrg != "" {
+				result.IsDatacenter = isDatacenterOrg(result.ASNOrg)
 			}
 		}
 	}

@@ -3,11 +3,11 @@ package service
 import (
 	"fmt"
 
-	"github.com/vibeswaf/waf/internal/logger"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/repository"
-	"github.com/vibeswaf/waf/internal/waf"
+	"github.com/iodesk/VibesWAF/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/waf"
 )
 
 type WAFService struct {

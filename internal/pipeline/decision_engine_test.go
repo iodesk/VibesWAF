@@ -3,7 +3,7 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 func scoringCfg(block, challenge int) func() *model.ScoringConfig {

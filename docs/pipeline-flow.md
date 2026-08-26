@@ -151,10 +151,13 @@ Logging is async via buffered channel + ClickHouse batch worker — non-blocking
 
 ## Performance Architecture
 
-- **Zero DB queries on request path.** All config (scoring, app, rate limit, IP reputation)
+- **Zero DB queries on request path.** All config (scoring, app, rate limit, IP reputation, IP access)
   served from memory via atomic-swap preloaded caches with background reload.
 - **Sharded flood protector.** 256 independently-locked partitions — requests for different
   IPs don't serialize.
+- **Sharded rate limiter.** 256 independently-locked partitions with per-shard eviction — same pattern as flood protector.
+- **MaxMind RWMutex.** GeoIP/ASN lookups use read-only lock; ASN cache is prebuilt at startup and refreshed in background.
+- **Pre-sorted bot fingerprint.** Static header list eliminates per-request sorting; FNV-64a replaces SHA-256 for faster hashing.
 - **Typed context fields.** No per-request map allocation or boxing. Dynamic extras via
   lazy-allocated `Extra` map only when needed (rule matches, JA4).
 - **Buffer pool proxy.** Reusable 32KB buffers for upstream body copy.

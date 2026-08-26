@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/vibeswaf/waf/internal/domain/app"
+import "github.com/iodesk/VibesWAF/internal/domain/app"
 
 type AppCreateRequest struct {
 	ID          string        `json:"id"`

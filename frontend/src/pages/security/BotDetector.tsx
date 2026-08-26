@@ -495,6 +495,36 @@ export default function BotDetector() {
         </Card>
       </div>
 
+      {/* DNS Verification Setting */}
+      <Card className="shadow-none border-border">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-md icon-container-warning">
+                <Globe className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-sm font-bold text-foreground">DNS Bot Verification</p>
+                <p className="text-[11px] text-muted-foreground/70">When enabled, verifies good bot IPs via reverse/forward DNS lookup on cache miss (adds latency on first request).</p>
+              </div>
+            </div>
+            <Switch
+              checked={botConfig?.dns_verification ?? true}
+              onCheckedChange={async (v) => {
+                if (!botConfig) return
+                try {
+                  await updateBotConfig.mutateAsync({ ...botConfig, dns_verification: v })
+                  addToast(`DNS verification ${v ? 'enabled' : 'disabled'}`, 'success')
+                } catch (error: any) {
+                  addToast(error?.message || 'Failed to update setting', 'error')
+                }
+              }}
+              className="data-[state=checked]:btn-primary"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Tables Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 

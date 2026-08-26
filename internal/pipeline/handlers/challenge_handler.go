@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/vibeswaf/waf/internal/challenge"
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/pages"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/challenge"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/pages"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type ChallengeHandler struct {

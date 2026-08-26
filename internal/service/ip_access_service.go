@@ -3,20 +3,42 @@ package service
 import (
 	"fmt"
 	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+	"unsafe"
 
-	"github.com/vibeswaf/waf/internal/domain/ip_access"
-	"github.com/vibeswaf/waf/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/domain/ip_access"
+	"github.com/iodesk/VibesWAF/internal/repository"
 )
 
-type IPAccessService struct {
-	repo repository.IPAccessRepository
+type compiledRule struct {
+	rule     *ip_access.IPAccessRule
+	network  *net.IPNet
+	singleIP net.IP
 }
 
+type ipAccessSnapshot struct {
+	rules map[string][]compiledRule
+}
+
+type IPAccessService struct {
+	repo  repository.IPAccessRepository
+	state unsafe.Pointer
+	mu    sync.RWMutex
+	stopCh chan struct{}
+}
 
 func NewIPAccessService(repo repository.IPAccessRepository) *IPAccessService {
-	return &IPAccessService{
-		repo: repo,
+	s := &IPAccessService{
+		repo:   repo,
+		stopCh: make(chan struct{}),
 	}
+	snap := s.loadSnapshot()
+	atomic.StorePointer(&s.state, unsafe.Pointer(snap))
+	go s.autoReload()
+	return s
 }
 
 
@@ -89,7 +111,107 @@ func (s *IPAccessService) Delete(appID string, id int) error {
 
 
 func (s *IPAccessService) CheckIP(appID string, ip string) (*ip_access.IPAccessRule, error) {
-	return s.repo.CheckIP(appID, ip)
+	return s.CheckIPInMemory(appID, ip)
+}
+
+func (s *IPAccessService) CheckIPInMemory(appID string, ip string) (*ip_access.IPAccessRule, error) {
+	snap := (*ipAccessSnapshot)(atomic.LoadPointer(&s.state))
+	if snap == nil {
+		return nil, nil
+	}
+
+	clientIP := net.ParseIP(ip)
+	if clientIP == nil {
+		return nil, fmt.Errorf("invalid IP: %s", ip)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	rules := snap.rules[appID]
+	for _, cr := range rules {
+		if cr.network != nil {
+			if cr.network.Contains(clientIP) {
+				return cr.rule, nil
+			}
+		} else if cr.singleIP != nil {
+			if cr.singleIP.Equal(clientIP) {
+				return cr.rule, nil
+			}
+		}
+	}
+
+	if appID != "default" {
+		defaultRules := snap.rules["default"]
+		for _, cr := range defaultRules {
+			if cr.network != nil {
+				if cr.network.Contains(clientIP) {
+					return cr.rule, nil
+				}
+			} else if cr.singleIP != nil {
+				if cr.singleIP.Equal(clientIP) {
+					return cr.rule, nil
+				}
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *IPAccessService) loadSnapshot() *ipAccessSnapshot {
+	rules, err := s.repo.ListAll()
+	if err != nil {
+		config.GetAppConfig().LogError("[IP_ACCESS] Failed to preload rules: %v", err)
+		return &ipAccessSnapshot{rules: make(map[string][]compiledRule)}
+	}
+
+	snap := &ipAccessSnapshot{rules: make(map[string][]compiledRule)}
+	for _, rule := range rules {
+		cr := compiledRule{rule: rule}
+
+		_, network, err := net.ParseCIDR(rule.IPRange)
+		if err == nil {
+			cr.network = network
+		} else {
+			ip := net.ParseIP(rule.IPRange)
+			if ip != nil {
+				cr.singleIP = ip
+			} else {
+				config.GetAppConfig().LogWarn("[IP_ACCESS] Skipping invalid IP range: %s", rule.IPRange)
+				continue
+			}
+		}
+
+		snap.rules[rule.AppID] = append(snap.rules[rule.AppID], cr)
+	}
+
+	config.GetAppConfig().LogDebug("[IP_ACCESS] Preloaded %d rules across %d apps", len(rules), len(snap.rules))
+	return snap
+}
+
+func (s *IPAccessService) autoReload() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case <-ticker.C:
+			snap := s.loadSnapshot()
+			s.mu.Lock()
+			atomic.StorePointer(&s.state, unsafe.Pointer(snap))
+			s.mu.Unlock()
+		}
+	}
+}
+
+func (s *IPAccessService) Stop() {
+	select {
+	case <-s.stopCh:
+	default:
+		close(s.stopCh)
+	}
 }
 
 

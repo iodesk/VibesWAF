@@ -1,7 +1,6 @@
 package ratelimit
 
 import (
-	"hash/fnv"
 	"sync"
 	"time"
 )
@@ -73,10 +72,14 @@ func NewFloodProtector(basicLimit, attackLimit, errorLimit int, basicWindow, att
 }
 
 // shardFor returns the shard responsible for an IP.
+// Uses inline FNV-1a to avoid allocating a hash.Hash per call.
 func (f *FloodProtector) shardFor(ip string) *floodShard {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(ip))
-	return f.shards[h.Sum32()%floodShards]
+	var h uint32 = 2166136261
+	for i := 0; i < len(ip); i++ {
+		h ^= uint32(ip[i])
+		h *= 16777619
+	}
+	return f.shards[h%floodShards]
 }
 
 func (f *FloodProtector) cfg() FloodConfig {

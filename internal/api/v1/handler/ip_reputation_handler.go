@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/api/v1/dto"
-	appcfg "github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/api/v1/dto"
+	appcfg "github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type IPReputationHandler struct {

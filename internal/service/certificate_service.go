@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/acme"
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/acme"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/repository"
 )
 
 type CertificateService struct {

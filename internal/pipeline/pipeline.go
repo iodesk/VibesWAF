@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 var ErrResponseWritten = errors.New("response already written")
@@ -216,9 +216,10 @@ func (p *Pipeline) applyWeightsWithConfig(ctx *Context, cfg *model.ScoringConfig
 
 	applyCategory := func(cat ScoreCategory, cw model.CategoryWeight) {
 		if !cw.Enabled {
-			if score, ok := rs.ByCategory[cat]; ok && score > 0 {
+			score := rs.get(cat)
+			if score > 0 {
 				rs.Total -= score
-				rs.ByCategory[cat] = 0
+				rs.set(cat, 0)
 			}
 			return
 		}
@@ -237,35 +238,37 @@ func (p *Pipeline) enrichTraceWithWeights(ctx *Context, cfg *model.ScoringConfig
 		return
 	}
 
-	categoryWeights := map[string]model.CategoryWeight{
-		"ip_reputation":    cfg.Weights.IPReputation,
-		"bot_detection":    cfg.Weights.BotDetection,
-		"waf_anomaly":      cfg.Weights.WAFAnomaly,
-		"protocol_anomaly": cfg.Weights.ProtocolAnomaly,
-	}
-
-	categoryFinal := map[string]int{
-		"ip_reputation":    ctx.RiskScore.ByCategory[ScoreCategoryIPReputation],
-		"bot_detection":    ctx.RiskScore.ByCategory[ScoreCategoryBotDetection],
-		"waf_anomaly":      ctx.RiskScore.ByCategory[ScoreCategoryWAFAnomaly],
-		"protocol_anomaly": ctx.RiskScore.ByCategory[ScoreCategoryProtocolAnomaly],
-	}
-
 	for i := range ctx.Trace.Stages {
 		stage := &ctx.Trace.Stages[i]
 		if stage.Score == 0 {
 			continue
 		}
-		cw, ok := categoryWeights[stage.Stage]
-		if !ok {
+
+		var cw model.CategoryWeight
+		var finalScore int
+		switch stage.Stage {
+		case "ip_reputation":
+			cw = cfg.Weights.IPReputation
+			finalScore = ctx.RiskScore.ByCategory.IPReputation
+		case "bot_detection":
+			cw = cfg.Weights.BotDetection
+			finalScore = ctx.RiskScore.ByCategory.BotDetection
+		case "waf_anomaly":
+			cw = cfg.Weights.WAFAnomaly
+			finalScore = ctx.RiskScore.ByCategory.WAFAnomaly
+		case "protocol_anomaly":
+			cw = cfg.Weights.ProtocolAnomaly
+			finalScore = ctx.RiskScore.ByCategory.ProtocolAnomaly
+		default:
 			continue
 		}
+
 		if !cw.Enabled {
 			stage.FinalScore = 0
 			stage.Multiplier = 0
 			continue
 		}
 		stage.Multiplier = cw.Multiplier
-		stage.FinalScore = categoryFinal[stage.Stage]
+		stage.FinalScore = finalScore
 	}
 }

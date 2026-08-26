@@ -202,10 +202,18 @@ INSERT INTO settings (key, value, updated_at) VALUES (
   '{
     "basic": {"type":"basic","enabled":true,"duration":30,"count":50,"action":"block","challenge_sec":300},
     "attack": {"type":"attack","enabled":true,"duration":60,"count":40,"action":"block","challenge_sec":300},
-    "error": {"type":"error","enabled":false,"duration":60,"count":15,"action":"challenge","challenge_sec":300}
+    "error": {"type":"error","enabled":false,"duration":60,"count":15,"action":"challenge","challenge_sec":300},
+    "exclude": {"extensions":[".js",".css",".png",".jpg",".jpeg",".gif",".svg",".ico",".woff",".woff2",".webp",".map"],"paths":[]}
   }',
   NOW()
 ) ON CONFLICT (key) DO NOTHING;
+
+-- Patch existing rate_limit rows that don't have exclude field yet
+UPDATE settings
+SET value = value || '{"exclude":{"extensions":[".js",".css",".png",".jpg",".jpeg",".gif",".svg",".ico",".woff",".woff2",".webp",".map"],"paths":[]}}'::jsonb,
+    updated_at = NOW()
+WHERE key = 'rate_limit'
+  AND NOT (value ? 'exclude');
 
 -- Bot Detection Config
 INSERT INTO settings (key, value, updated_at) VALUES (

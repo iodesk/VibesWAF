@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/domain/app"
-	"github.com/vibeswaf/waf/internal/domain/ip_access"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/domain/app"
+	"github.com/iodesk/VibesWAF/internal/domain/ip_access"
 )
 
 type IPChecker interface {

@@ -1,9 +1,46 @@
 # Changelog
 
+## [1.0.6] - 2026-08-10
 
+### Performance
 
+- IPAccess: preload all rules into memory at startup with atomic swap; eliminates PostgreSQL query per request on hot path. (`internal/service/ip_access_service.go`, `internal/repository/ip_access_repository.go`)
+- MaxMind: changed Lookup() from exclusive Lock to RLock; ASN/datacenter maps are now read-only during request processing, eliminating concurrent request serialization. (`internal/service/maxmind_service.go`)
+- RateLimiter: sharded into 256 partitions with per-shard mutex; evictOldest() now scans only the target shard (~2K entries) instead of global 500K map. (`internal/ratelimit/token_bucket.go`)
+- Bot fingerprint: pre-sorted static header list eliminates per-request sort; replaced SHA-256 with FNV-64a for faster hashing. (`internal/bot/fingerprint.go`)
+- RiskScore: replaced ByCategory map with fixed CategoryScores struct; eliminates map allocation per request. (`internal/pipeline/risk_score.go`, `internal/pipeline/pipeline.go`, `internal/pipeline/decision_engine.go`)
+- Decision.Metadata: lazy initialization (nil by default); eliminates map allocation per decision. (`internal/pipeline/decision.go`)
+- WAF_SECRET: cached at startup in ChallengeValidator struct; eliminates os.Getenv syscall per cookie validation. (`internal/pipeline/handlers/challenge_validator.go`)
+- enrichTraceWithWeights: replaced 2 map allocations with inline switch; zero allocation for trace weight enrichment. (`internal/pipeline/pipeline.go`)
+- ChallengeValidator: HMAC hasher pooled via sync.Pool; eliminates hash allocation per cookie verification. (`internal/pipeline/handlers/challenge_validator.go`)
+- Decision cache key: replaced SHA-256 with FNV-64a; eliminates heavy hash allocation per cache lookup. (`internal/cache/decision_cache.go`)
+- Flood shardFor: inline FNV-1a replaces hash/fnv.New32a() allocation; zero-alloc shard selection. (`internal/ratelimit/flood.go`)
+- RateLimiter GenerateKey: replaced SHA-256 with FNV-64a for internal key hashing. (`internal/ratelimit/key.go`)
+- IP Reputation: replaced linear CIDR scan with prefix trie (bit-level); lookup is now O(k) where k=prefix length (max 32 for IPv4, 128 for IPv6) regardless of entry count. (`internal/service/ip_trie.go`, `internal/service/ip_reputation_service.go`)
+- Bot UA detection: pre-indexed known bot patterns at load time; `isKnownBotUA()` now iterates only enabled good_bot/bad_bot patterns instead of all patterns. (`internal/service/bot_detection_service.go`)
+
+### Internal
+
+- ClickHouse auto-reconnects every 5s when down; worker retries connection until healthy, then re-runs idempotent migration. (`internal/logger/worker.go`, `internal/logger/clickhouse.go`, `main.go`)
+
+### Changed
+
+- Migrated from OpenResty to pure nginx: JA4/JA4S/JA4H computed by native nginx module instead of Lua (`resty.ja4`/`resty.ja4h`); dynamic certs via `ssl_dynamic_certificate_*` directives instead of `ssl_certificate_by_lua_file`; `X-JA4`/`X-JA4H` still forwarded so Go backend is unchanged. (`config/nginx.conf.SELF`)
+- JA4H forwarded with `ja4h_` prefix (`proxy_set_header X-JA4H "ja4h_$http_ja4h"`) so Go parser (`extractUAHashFromJA4H`) keeps working without code changes. (`config/nginx.conf.SELF`)
+- Flood exclude: basic flood protector now skips counting requests matching configured file extensions or path prefixes. (`internal/model/settings.go`, `internal/pipeline/handlers/flood_handler.go`)
+- Rate Limiter dashboard: added Exclude section with CRUD for extensions and paths. (`frontend/src/pages/security/RateLimiter.tsx`)
+- Default exclude extensions: `.js`, `.css`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.ico`, `.woff`, `.woff2`, `.webp`, `.map`. (`internal/migration/init_postgres.sql`)
+- Bot DNS Verification: added global enable/disable toggle in Bot Detector dashboard settings. When disabled, good bot IP verification via DNS is skipped entirely. (`internal/model/settings.go`, `internal/service/bot_detection_service.go`, `frontend/src/pages/security/BotDetector.tsx`, `frontend/src/lib/api/types.ts`)
+
+### Internal
+
+- `const Version = "1.0.6"` in `internal/config/app_config.go`.
 
 ## [1.0.5] - 2026-07-07
+
+### Internal
+
+- HTTP fingerprint upgraded from SHA-1 to SHA-256, now includes JA4, JA4H, HTTP version, TLS version, and ALPN. (`internal/bot/fingerprint.go`)
 
 ### Changed
 

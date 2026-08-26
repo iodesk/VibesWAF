@@ -180,6 +180,7 @@ export interface BotConfig {
   rules: Record<string, number>;
   challenge: ChallengeConfig;
   trust_levels: ChallengeTrustLevel;
+  dns_verification: boolean;
 }
 
 export interface WAFConfig {
@@ -255,12 +256,19 @@ export interface RateLimitResponse {
   basic: RateLimitConfig;
   attack: RateLimitConfig;
   error: RateLimitConfig;
+  exclude: FloodExclude;
 }
 
 export interface RateLimitUpdateRequest {
   basic?: RateLimitConfig;
   attack?: RateLimitConfig;
   error?: RateLimitConfig;
+  exclude?: FloodExclude;
+}
+
+export interface FloodExclude {
+  extensions: string[];
+  paths: string[];
 }
 
 export interface IPAccessRule {

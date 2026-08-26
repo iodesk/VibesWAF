@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"sync"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -38,8 +39,16 @@ type LogEntry struct {
 
 type Clickhouse struct {
 	ch     chan LogEntry
-	conn   driver.Conn
 	stopCh chan struct{}
+
+	mu        sync.RWMutex
+	conn      driver.Conn
+	connected bool
+
+	host     string
+	database string
+	user     string
+	password string
 }
 
 func NewClickhouse() *Clickhouse {
@@ -51,6 +60,12 @@ func NewClickhouse() *Clickhouse {
 	return c
 }
 
+func (c *Clickhouse) IsConnected() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.connected && c.conn != nil
+}
+
 func (c *Clickhouse) Log(entry LogEntry) {
 	select {
 	case c.ch <- entry:
@@ -59,5 +74,7 @@ func (c *Clickhouse) Log(entry LogEntry) {
 }
 
 func (c *Clickhouse) Conn() driver.Conn {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.conn
 }

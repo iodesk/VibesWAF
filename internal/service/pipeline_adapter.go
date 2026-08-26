@@ -1,6 +1,6 @@
 package service
 
-import "github.com/vibeswaf/waf/internal/pipeline"
+import "github.com/iodesk/VibesWAF/internal/pipeline"
 
 type pipelineContextAdapter struct {
 	ctx *pipeline.Context

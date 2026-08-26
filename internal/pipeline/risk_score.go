@@ -16,16 +16,55 @@ type ScoreEntry struct {
 	Score    int           `json:"score"`
 }
 
+type CategoryScores struct {
+	IPReputation    int `json:"ip_reputation"`
+	BotDetection    int `json:"bot_detection"`
+	WAFAnomaly      int `json:"waf_anomaly"`
+	ProtocolAnomaly int `json:"protocol_anomaly"`
+	Trust           int `json:"trust"`
+}
+
 type RiskScore struct {
 	Total      int            `json:"total"`
 	Entries    []ScoreEntry   `json:"entries"`
-	ByCategory map[ScoreCategory]int `json:"by_category"`
+	ByCategory CategoryScores `json:"by_category"`
 }
 
 func NewRiskScore() *RiskScore {
 	return &RiskScore{
-		Entries:    make([]ScoreEntry, 0),
-		ByCategory: make(map[ScoreCategory]int),
+		Entries: make([]ScoreEntry, 0),
+	}
+}
+
+func (rs *RiskScore) get(category ScoreCategory) int {
+	switch category {
+	case ScoreCategoryIPReputation:
+		return rs.ByCategory.IPReputation
+	case ScoreCategoryBotDetection:
+		return rs.ByCategory.BotDetection
+	case ScoreCategoryWAFAnomaly:
+		return rs.ByCategory.WAFAnomaly
+	case ScoreCategoryProtocolAnomaly:
+		return rs.ByCategory.ProtocolAnomaly
+	case ScoreCategoryTrust:
+		return rs.ByCategory.Trust
+	default:
+		return 0
+	}
+}
+
+func (rs *RiskScore) set(category ScoreCategory, value int) {
+	switch category {
+	case ScoreCategoryIPReputation:
+		rs.ByCategory.IPReputation = value
+	case ScoreCategoryBotDetection:
+		rs.ByCategory.BotDetection = value
+	case ScoreCategoryWAFAnomaly:
+		rs.ByCategory.WAFAnomaly = value
+	case ScoreCategoryProtocolAnomaly:
+		rs.ByCategory.ProtocolAnomaly = value
+	case ScoreCategoryTrust:
+		rs.ByCategory.Trust = value
 	}
 }
 
@@ -36,18 +75,18 @@ func (rs *RiskScore) Add(category ScoreCategory, rule string, score int) {
 		Score:    score,
 	}
 	rs.Entries = append(rs.Entries, entry)
-	rs.ByCategory[category] += score
+	rs.set(category, rs.get(category)+score)
 	rs.Total += score
 }
 
 func (rs *RiskScore) ApplyCap(category ScoreCategory, maxScore int) {
-	current := rs.ByCategory[category]
+	current := rs.get(category)
 	if current <= maxScore {
 		return
 	}
 
 	overflow := current - maxScore
-	rs.ByCategory[category] = maxScore
+	rs.set(category, maxScore)
 	rs.Total -= overflow
 }
 
@@ -56,10 +95,10 @@ func (rs *RiskScore) ApplyMultiplier(category ScoreCategory, multiplier float64)
 		return
 	}
 
-	current := rs.ByCategory[category]
+	current := rs.get(category)
 	adjusted := int(float64(current) * multiplier)
 	diff := adjusted - current
-	rs.ByCategory[category] = adjusted
+	rs.set(category, adjusted)
 	rs.Total += diff
 }
 

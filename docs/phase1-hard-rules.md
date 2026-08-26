@@ -50,8 +50,8 @@ Each handler checks `ctx.HardDecision` at entry — if already set by a previous
 
 **Flow:**
 1. Resolve `appID` (per-app or default)
-2. Call `ipAccessService.CheckIP(appID, clientIP)`
-3. Match against CIDR ranges / single IPs
+2. Call `ipAccessService.CheckIPInMemory(appID, clientIP)` — in-memory lookup, zero DB query
+3. Match against pre-compiled CIDR ranges / single IPs from atomic-swapped snapshot
 
 **Outcomes:**
 
@@ -100,6 +100,11 @@ Each profile has:
 - `challenge_sec` — penalty duration after exceeded
 - `action` — block or challenge
 - `enabled` — on/off
+
+**Exclude from counting:**
+- `extensions` — file extensions skipped by basic flood (e.g. `.js`, `.css`, `.png`)
+- `paths` — path prefixes skipped by basic flood (e.g. `/api/realtime/`)
+- Only affects basic flood counting; attack and error floods always count all requests
 
 **Architecture:**
 - 256 independently-locked shards (FNV hash of IP)

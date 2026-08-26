@@ -12,8 +12,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/repository"
 )
 
 type botIPRangeState struct {

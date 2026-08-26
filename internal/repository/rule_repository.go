@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/vibeswaf/waf/internal/domain/rule"
+	"github.com/iodesk/VibesWAF/internal/domain/rule"
 )
 
 

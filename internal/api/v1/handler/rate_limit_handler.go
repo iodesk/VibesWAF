@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/vibeswaf/waf/internal/api/v1/dto"
-	appcfg "github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/logger"
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/repository"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/api/v1/dto"
+	appcfg "github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/repository"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 
@@ -38,9 +38,10 @@ func (h *RateLimitHandler) GetRateLimitConfig(w http.ResponseWriter, r *http.Req
 
 
 	response := dto.RateLimitResponse{
-		Basic:  convertProfileToDTO(config.Basic),
-		Attack: convertProfileToDTO(config.Attack),
-		Error:  convertProfileToDTO(config.Error),
+		Basic:   convertProfileToDTO(config.Basic),
+		Attack:  convertProfileToDTO(config.Attack),
+		Error:   convertProfileToDTO(config.Error),
+		Exclude: convertExcludeToDTO(config.Exclude),
 	}
 
 	respondJSON(w, http.StatusOK, response)
@@ -76,6 +77,9 @@ func (h *RateLimitHandler) UpdateRateLimitConfig(w http.ResponseWriter, r *http.
 	if req.Error != nil {
 		config.Error = convertProfileFromDTO(*req.Error)
 	}
+	if req.Exclude != nil {
+		config.Exclude = convertExcludeFromDTO(*req.Exclude)
+	}
 
 
 	if err := h.repo.UpdateRateLimitConfig(config); err != nil {
@@ -89,9 +93,10 @@ func (h *RateLimitHandler) UpdateRateLimitConfig(w http.ResponseWriter, r *http.
 
 
 	response := dto.RateLimitResponse{
-		Basic:  convertProfileToDTO(config.Basic),
-		Attack: convertProfileToDTO(config.Attack),
-		Error:  convertProfileToDTO(config.Error),
+		Basic:   convertProfileToDTO(config.Basic),
+		Attack:  convertProfileToDTO(config.Attack),
+		Error:   convertProfileToDTO(config.Error),
+		Exclude: convertExcludeToDTO(config.Exclude),
 	}
 
 	respondJSON(w, http.StatusOK, response)
@@ -115,6 +120,20 @@ func convertProfileFromDTO(dto dto.RateLimitConfig) model.RateLimitProfile {
 		Count:        dto.Count,
 		Action:       dto.Action,
 		ChallengeSec: dto.ChallengeSec,
+	}
+}
+
+func convertExcludeToDTO(exclude model.FloodExclude) dto.FloodExclude {
+	return dto.FloodExclude{
+		Extensions: exclude.Extensions,
+		Paths:      exclude.Paths,
+	}
+}
+
+func convertExcludeFromDTO(dto dto.FloodExclude) model.FloodExclude {
+	return model.FloodExclude{
+		Extensions: dto.Extensions,
+		Paths:      dto.Paths,
 	}
 }
 

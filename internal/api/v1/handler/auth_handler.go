@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/model"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/model"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 

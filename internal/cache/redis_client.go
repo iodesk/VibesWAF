@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/vibeswaf/waf/internal/config"
+	"github.com/iodesk/VibesWAF/internal/config"
 )
 
 var ErrCacheDisabled = errors.New("cache disabled")

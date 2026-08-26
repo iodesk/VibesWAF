@@ -2,17 +2,17 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/pipeline"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
 )
 
 const (
@@ -293,16 +293,16 @@ func (c *DecisionCache) GetStats() CacheStats {
 }
 
 func (c *DecisionCache) generateKey(ctx *pipeline.Context) string {
-	h := sha256.New()
+	h := fnv.New64a()
 
 	if ctx.AppID != "" {
-		h.Write([]byte(ctx.AppID))
+		_, _ = h.Write([]byte(ctx.AppID))
 	}
-	h.Write([]byte(ctx.ClientIP))
-	h.Write([]byte(ctx.Normalized.UA))
-	h.Write([]byte(ctx.Normalized.Method))
-	h.Write([]byte(ctx.Normalized.Path))
-	h.Write([]byte(ctx.Normalized.Query))
+	_, _ = h.Write([]byte(ctx.ClientIP))
+	_, _ = h.Write([]byte(ctx.Normalized.UA))
+	_, _ = h.Write([]byte(ctx.Normalized.Method))
+	_, _ = h.Write([]byte(ctx.Normalized.Path))
+	_, _ = h.Write([]byte(ctx.Normalized.Query))
 
-	return fmt.Sprintf("waf:decision:%x", h.Sum(nil)[:12])
+	return fmt.Sprintf("waf:decision:%016x", h.Sum64())
 }

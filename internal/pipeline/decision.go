@@ -23,20 +23,17 @@ const (
 
 func NewDecision(action, source, reason string) Decision {
 	return Decision{
-		Action:   action,
-		Source:   source,
-		Reason:   reason,
-		Metadata: make(map[string]interface{}),
+		Action: action,
+		Source: source,
+		Reason: reason,
 	}
 }
-
 
 func NewSkipDecision(source string, skipPhases []string) Decision {
 	return Decision{
 		Action:     "skip",
 		Source:     source,
 		SkipPhases: skipPhases,
-		Metadata:   make(map[string]interface{}),
 	}
 }
 

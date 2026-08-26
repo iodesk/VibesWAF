@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/logger"
 )
 
 type AnalyticsHandler struct {

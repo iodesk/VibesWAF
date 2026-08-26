@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 type IPReputationRepository struct {

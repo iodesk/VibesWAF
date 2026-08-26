@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/api/v1/dto"
-	"github.com/vibeswaf/waf/internal/domain/ip_access"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/api/v1/dto"
+	"github.com/iodesk/VibesWAF/internal/domain/ip_access"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type IPAccessHandler struct {

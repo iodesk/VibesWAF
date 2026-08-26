@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/vibeswaf/waf/internal/config"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type HealthHandler struct{}

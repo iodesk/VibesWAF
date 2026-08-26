@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/domain/ip_access"
+	"github.com/iodesk/VibesWAF/internal/domain/ip_access"
 )
 
 type IPAccessRepository interface {
 	ListByApp(appID string) ([]*ip_access.IPAccessRule, error)
+	ListAll() ([]*ip_access.IPAccessRule, error)
 	GetByID(id int) (*ip_access.IPAccessRule, error)
 	Create(req *ip_access.CreateRequest) (*ip_access.IPAccessRule, error)
 	Update(id int, req *ip_access.UpdateRequest) (*ip_access.IPAccessRule, error)
@@ -23,6 +24,27 @@ type ipAccessRepository struct {
 
 func NewIPAccessRepository(db *sql.DB) IPAccessRepository {
 	return &ipAccessRepository{db: db}
+}
+
+func (r *ipAccessRepository) ListAll() ([]*ip_access.IPAccessRule, error) {
+	rows, err := r.db.Query(`
+		SELECT id, app_id, ip_range, description, action, enabled, created_at, updated_at
+		FROM ip_access_rules WHERE enabled = true ORDER BY app_id, id ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all ip access rules: %w", err)
+	}
+	defer rows.Close()
+
+	var rules []*ip_access.IPAccessRule
+	for rows.Next() {
+		rule := &ip_access.IPAccessRule{}
+		if err := rows.Scan(&rule.ID, &rule.AppID, &rule.IPRange, &rule.Description, &rule.Action, &rule.Enabled, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan ip access rule: %w", err)
+		}
+		rules = append(rules, rule)
+	}
+	return rules, nil
 }
 
 func (r *ipAccessRepository) ListByApp(appID string) ([]*ip_access.IPAccessRule, error) {

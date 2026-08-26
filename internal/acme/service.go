@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/vibeswaf/waf/internal/config"
+	"github.com/iodesk/VibesWAF/internal/config"
 	"path/filepath"
 	"strings"
 	"sync"

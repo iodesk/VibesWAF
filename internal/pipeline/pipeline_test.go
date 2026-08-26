@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/vibeswaf/waf/internal/model"
+	"github.com/iodesk/VibesWAF/internal/model"
 )
 
 // stubHandler runs an arbitrary function, used to simulate pipeline stages.
@@ -49,8 +49,8 @@ func TestPipelineScoringPathAllow(t *testing.T) {
 	if ctx.Action != "" {
 		t.Fatalf("Action = %q, want empty (allow, total 10)", ctx.Action)
 	}
-	if ctx.RiskScore.Total != 10 {
-		t.Fatalf("risk total = %d, want 10", ctx.RiskScore.Total)
+	if ctx.RiskScore.Total != 15 {
+		t.Fatalf("risk total = %d, want 15 (WAF 10 * multiplier 1.5)", ctx.RiskScore.Total)
 	}
 	if ctx.Trace.Phase != "SCORING" {
 		t.Fatalf("trace phase = %q, want SCORING", ctx.Trace.Phase)
@@ -166,12 +166,12 @@ func TestPipelineDisabledCategoryRemovedFromScore(t *testing.T) {
 	if err := p.Execute(ctx); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
-	// IP reputation (25) removed, only WAF (30) remains.
-	if ctx.RiskScore.Total != 30 {
-		t.Fatalf("risk total = %d, want 30 (IP reputation disabled)", ctx.RiskScore.Total)
+	// IP reputation (25) removed. WAF (30 * 1.5 = 45, capped at 40) remains.
+	if ctx.RiskScore.Total != 40 {
+		t.Fatalf("risk total = %d, want 40 (IP reputation disabled, WAF capped)", ctx.RiskScore.Total)
 	}
-	if ctx.RiskScore.ByCategory[ScoreCategoryIPReputation] != 0 {
-		t.Fatalf("disabled category should be zeroed, got %d", ctx.RiskScore.ByCategory[ScoreCategoryIPReputation])
+	if ctx.RiskScore.ByCategory.IPReputation != 0 {
+		t.Fatalf("disabled category should be zeroed, got %d", ctx.RiskScore.ByCategory.IPReputation)
 	}
 }
 

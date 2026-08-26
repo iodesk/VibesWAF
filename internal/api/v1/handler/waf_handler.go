@@ -11,16 +11,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/bot"
-	"github.com/vibeswaf/waf/internal/domain/app"
-	"github.com/vibeswaf/waf/internal/logger"
-	"github.com/vibeswaf/waf/internal/metrics"
-	"github.com/vibeswaf/waf/internal/pages"
-	"github.com/vibeswaf/waf/internal/pipeline"
-	handlers "github.com/vibeswaf/waf/internal/pipeline/handlers"
-	"github.com/vibeswaf/waf/internal/ratelimit"
-	"github.com/vibeswaf/waf/internal/service"
-	"github.com/vibeswaf/waf/internal/transport"
+	"github.com/iodesk/VibesWAF/internal/bot"
+	"github.com/iodesk/VibesWAF/internal/domain/app"
+	"github.com/iodesk/VibesWAF/internal/logger"
+	"github.com/iodesk/VibesWAF/internal/metrics"
+	"github.com/iodesk/VibesWAF/internal/pages"
+	"github.com/iodesk/VibesWAF/internal/pipeline"
+	handlers "github.com/iodesk/VibesWAF/internal/pipeline/handlers"
+	"github.com/iodesk/VibesWAF/internal/ratelimit"
+	"github.com/iodesk/VibesWAF/internal/service"
+	"github.com/iodesk/VibesWAF/internal/transport"
 )
 
 

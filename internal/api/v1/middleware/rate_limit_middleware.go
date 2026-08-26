@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vibeswaf/waf/internal/ratelimit"
-	"github.com/vibeswaf/waf/internal/service"
+	"github.com/iodesk/VibesWAF/internal/ratelimit"
+	"github.com/iodesk/VibesWAF/internal/service"
 )
 
 type RateLimitMiddleware struct {
