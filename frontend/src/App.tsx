@@ -23,6 +23,7 @@ const AnomalyBehavior = lazy(() => import('./pages/security/AnomalyBehavior'))
 const IPReputation = lazy(() => import('./pages/security/IPReputation'))
 const Logs         = lazy(() => import('./pages/monitoring/Logs'))
 const ThreatIntelligence = lazy(() => import('./pages/monitoring/ThreatIntelligence'))
+const Fingerprints = lazy(() => import('./pages/monitoring/Fingerprints'))
 const Login        = lazy(() => import('./pages/auth/Login'))
 const Setup        = lazy(() => import('./pages/auth/Setup'))
 
@@ -58,6 +59,7 @@ const navGroups = [
     items: [
       { name: 'Logs',               href: '/logs',               icon: Activity },
       { name: 'Threat Intelligence', href: '/threat-intelligence', icon: Radar },
+      { name: 'Fingerprints',        href: '/fingerprints',        icon: Fingerprint },
     ],
   },
 ]
@@ -298,6 +300,7 @@ function AppContent() {
               <Route path="/security/challenged"     element={<ProtectedRoute><Challenged /></ProtectedRoute>} />
               <Route path="/logs"                    element={<ProtectedRoute><Logs /></ProtectedRoute>} />
               <Route path="/threat-intelligence"    element={<ProtectedRoute><ThreatIntelligence /></ProtectedRoute>} />
+              <Route path="/fingerprints"           element={<ProtectedRoute><Fingerprints /></ProtectedRoute>} />
             </Routes>
           </Suspense>
         </main>

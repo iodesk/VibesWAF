@@ -16,7 +16,7 @@ const (
 	maxLogBackups = 3
 )
 
-const Version = "1.0.8"
+const Version = "1.0.7"
 
 type AppConfig struct {
 	Debug                  bool

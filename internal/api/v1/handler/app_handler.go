@@ -164,6 +164,18 @@ func (h *AppHandler) ToggleUnderAttackMode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	
+	if req.Enabled {
+		a, err := h.appService.GetApp(id)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "Application not found")
+			return
+		}
+		if a.IsStream() {
+			respondError(w, http.StatusBadRequest, "Under Attack mode is not supported for TCP/UDP applications. Switch to HTTP mode to enable this feature.")
+			return
+		}
+	}
+	
 	if err := h.appService.ToggleUnderAttackMode(id, req.Enabled); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

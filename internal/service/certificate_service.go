@@ -282,12 +282,12 @@ func (s *CertificateService) SyncFromACME(domain, appID string) error {
 	keyPath := fmt.Sprintf("%s/%s/key.pem", s.certDir, domain)
 	
 	if _, err := os.Stat(certPath); err != nil {
-		config.GetAppConfig().LogError("[CertService] Certificate file not found: %s - %v", certPath, err)
+		config.GetAppConfig().LogInfo("[CertService] Certificate not yet issued for %s (will issue async)", domain)
 		return fmt.Errorf("certificate not found on filesystem: %w", err)
 	}
-	
+
 	if _, err := os.Stat(keyPath); err != nil {
-		config.GetAppConfig().LogError("[CertService] Key file not found: %s - %v", keyPath, err)
+		config.GetAppConfig().LogInfo("[CertService] Key not yet issued for %s (will issue async)", domain)
 		return fmt.Errorf("key not found on filesystem: %w", err)
 	}
 

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { wafApi } from '@/lib/api-client';
-import type { BotPatternRequest } from '@/lib/api-client';
+import type { BotPatternRequest, BotPatternBulkCreateRequest, BotPatternBulkUpdateRequest } from '@/lib/api-client';
 
 export function useBotPatterns() {
   return useQuery({
@@ -48,6 +48,28 @@ export function useBulkDeleteBotPatterns() {
 
   return useMutation({
     mutationFn: (ids: number[]) => wafApi.botPatterns.bulkDelete(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['botPatterns'] });
+    },
+  });
+}
+
+export function useBulkCreateBotPatterns() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: BotPatternBulkCreateRequest) => wafApi.botPatterns.bulkCreate(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['botPatterns'] });
+    },
+  });
+}
+
+export function useBulkUpdateBotPatterns() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: BotPatternBulkUpdateRequest) => wafApi.botPatterns.bulkUpdate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['botPatterns'] });
     },

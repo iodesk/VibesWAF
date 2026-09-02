@@ -1,7 +1,6 @@
 [Unit]
 Description=Vibeswaf WAF Backend Service
-After=network.target postgresql.service clickhouse-server.service
-Wants=postgresql.service clickhouse-server.service
+After=network.target
 
 [Service]
 Type=simple
@@ -15,17 +14,15 @@ StandardOutput=journal
 StandardError=journal
 
 # Environment
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EnvironmentFile=/opt/vibeswaf/.env
 
-# Security
-NoNewPrivileges=true
+# Security NoNewPrivileges=false required for nginx reload via sudo
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# acme.sh writes account state, renewal config, and per-domain cert storage
-# under /opt/vibeswaf/.acme.sh, so it must be writable under ProtectSystem=strict.
-ReadWritePaths=/opt/vibeswaf/logs /opt/vibeswaf/data /opt/vibeswaf/.acme.sh /opt/certs
+ReadWritePaths=/opt/vibeswaf/logs /opt/vibeswaf/data /opt/vibeswaf/.acme.sh /opt/certs /etc/nginx/stream.d
 
 # Resource limits
 LimitNOFILE=65536

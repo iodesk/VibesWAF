@@ -26,6 +26,7 @@ const defaultAppConfig: AppConfig = {
   ],
   lb_method: 'round-robin',
   redirect_https: false,
+  stream_config: '',
   health_check: {
     enabled: false,
     path: '/health',

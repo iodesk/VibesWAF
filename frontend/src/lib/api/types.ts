@@ -59,6 +59,8 @@ export interface AppConfig {
   upstreams: Upstream[];
   lb_method: "round-robin" | "least-conn" | "ip-hash";
   listen_port?: number;
+  backend_port?: number;
+  stream_config?: string;
   redirect_https: boolean;
   root_redirect?: string;
   health_check: HealthCheckConfig;
@@ -155,6 +157,23 @@ export interface BotPatternRequest {
   verify_ip: boolean;
   enabled: boolean;
   description: string;
+}
+
+export interface BotPatternBulkCreateRequest {
+  patterns: string[];
+  pattern_type: 'good_bot' | 'bad_bot' | 'suspicious_ua' | 'bad_referer';
+  score: number;
+  verify_ip: boolean;
+  enabled: boolean;
+  description: string;
+}
+
+export interface BotPatternBulkUpdateRequest {
+  ids: number[];
+  pattern_type?: 'good_bot' | 'bad_bot' | 'suspicious_ua' | 'bad_referer';
+  score?: number;
+  verify_ip?: boolean;
+  enabled?: boolean;
 }
 
 export interface ChallengeConfig {
@@ -472,7 +491,6 @@ export interface ThreatSummaryResponse {
   category_avg: CategoryAverage;
 }
 
-
 export interface IPReputationEntry {
   id: number;
   entry_type: 'ip' | 'asn';
@@ -501,4 +519,13 @@ export interface IPReputationConfig {
   maxmind_asn_score: number;
   spamhaus_ip_score: number;
   spamhaus_asn_score: number;
+}
+export interface JA4FingerprintEntry {
+  ja4: string;
+  count: number;
+}
+
+export interface JA4FingerprintResponse {
+  data: JA4FingerprintEntry[];
+  total: number;
 }

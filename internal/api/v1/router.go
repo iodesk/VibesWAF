@@ -41,6 +41,7 @@ type Router struct {
 	performanceHandler   *handler.PerformanceHandler
 	certificateHandler   *handler.CertificateHandler
 	cacheHandler         *handler.CacheHandler
+	fingerprintHandler   *handler.FingerprintHandler
 	authMiddleware       *middleware.AuthMiddleware
 	rateLimitMiddleware  *middleware.RateLimitMiddleware
 	botService           *service.BotDetectionService
@@ -95,6 +96,7 @@ func NewRouter(
 		performanceHandler:  handler.NewPerformanceHandler(),
 		certificateHandler:  handler.NewCertificateHandler(certificateService),
 		cacheHandler:        handler.NewCacheHandler(decisionCache),
+		fingerprintHandler:  handler.NewFingerprintHandler(logger),
 		authMiddleware:      middleware.NewAuthMiddleware(authService),
 		rateLimitMiddleware: middleware.NewRateLimitMiddleware(authService),
 		botService:          botService,
@@ -445,6 +447,16 @@ func (rt *Router) handleBotPatternRoutes(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if path == "/api/v1/bot-patterns/bulk-create" && r.Method == http.MethodPost {
+		rt.botPatternHandler.BulkCreate(w, r)
+		return
+	}
+
+	if path == "/api/v1/bot-patterns/bulk-update" && r.Method == http.MethodPut {
+		rt.botPatternHandler.BulkUpdate(w, r)
+		return
+	}
+
 	if strings.HasPrefix(path, "/api/v1/bot-patterns/") && r.Method == http.MethodPut {
 		rt.botPatternHandler.Update(w, r)
 		return
@@ -641,6 +653,16 @@ func (rt *Router) handleAnalyticsRoutes(w http.ResponseWriter, r *http.Request) 
 
 	if path == "/api/v1/analytics/threat-intel/custom-rules" && r.Method == http.MethodGet {
 		rt.analyticsHandler.GetCustomRuleIntel(w, r)
+		return
+	}
+
+	if path == "/api/v1/analytics/fingerprints" && r.Method == http.MethodGet {
+		rt.fingerprintHandler.GetJA4Fingerprints(w, r)
+		return
+	}
+
+	if path == "/api/v1/analytics/fingerprints/export" && r.Method == http.MethodGet {
+		rt.fingerprintHandler.ExportJA4Fingerprints(w, r)
 		return
 	}
 

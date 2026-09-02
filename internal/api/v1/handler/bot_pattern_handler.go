@@ -237,3 +237,128 @@ func (h *BotPatternHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("%d patterns deleted", deleted),
 	})
 }
+
+func (h *BotPatternHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
+	if cfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	var req dto.BulkCreateBotPatternRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if len(req.Patterns) == 0 {
+		respondError(w, http.StatusBadRequest, "patterns is required")
+		return
+	}
+	if len(req.Patterns) > 500 {
+		respondError(w, http.StatusBadRequest, "Maximum 500 patterns per bulk create")
+		return
+	}
+	if req.PatternType == "" {
+		respondError(w, http.StatusBadRequest, "pattern_type is required")
+		return
+	}
+
+	if req.PatternType == "good_bot" {
+		if req.Score > 0 {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid score for good_bot: %d. Must be 0 or negative", req.Score))
+			return
+		}
+	} else {
+		if req.Score < 0 || req.Score > 50 {
+			respondError(w, http.StatusBadRequest, fmt.Sprintf("Invalid score for %s: %d. Must be between 0-50", req.PatternType, req.Score))
+			return
+		}
+	}
+
+	patterns := make([]model.BotPattern, 0, len(req.Patterns))
+	for _, p := range req.Patterns {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		patterns = append(patterns, model.BotPattern{
+			PatternType: req.PatternType,
+			Pattern:     p,
+			Score:       req.Score,
+			VerifyIP:    req.VerifyIP,
+			Enabled:     req.Enabled,
+			Description: req.Description,
+		})
+	}
+
+	if len(patterns) == 0 {
+		respondError(w, http.StatusBadRequest, "No valid patterns provided")
+		return
+	}
+
+	created, err := h.repo.BulkCreatePatterns(patterns)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to bulk create bot patterns: "+err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]interface{}{
+		"success": true,
+		"created": created,
+		"message": fmt.Sprintf("%d patterns created", created),
+	})
+}
+
+func (h *BotPatternHandler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
+	if cfg.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	var req dto.BulkUpdateBotPatternRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		respondError(w, http.StatusBadRequest, "ids is required")
+		return
+	}
+	if len(req.IDs) > 500 {
+		respondError(w, http.StatusBadRequest, "Maximum 500 patterns per bulk update")
+		return
+	}
+
+	if req.PatternType == "" && req.Score == nil && req.VerifyIP == nil && req.Enabled == nil {
+		respondError(w, http.StatusBadRequest, "At least one field to update is required")
+		return
+	}
+
+	if req.PatternType != "" {
+		validTypes := map[string]bool{"good_bot": true, "bad_bot": true, "suspicious_ua": true, "bad_referer": true}
+		if !validTypes[req.PatternType] {
+			respondError(w, http.StatusBadRequest, "Invalid pattern_type")
+			return
+		}
+	}
+
+	if req.Score != nil {
+		if *req.Score < -200 || *req.Score > 50 {
+			respondError(w, http.StatusBadRequest, "Score must be between -200 and 50")
+			return
+		}
+	}
+
+	updated, err := h.repo.BulkUpdatePatterns(req.IDs, req.PatternType, req.Score, req.VerifyIP, req.Enabled)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to bulk update bot patterns: "+err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"updated": updated,
+		"message": fmt.Sprintf("%d patterns updated", updated),
+	})
+}

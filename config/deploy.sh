@@ -121,8 +121,21 @@ echo -e "${YELLOW}[7/12] Copying files...${NC}"
 cp vibeswaf $DEPLOY_DIR/
 cp .env $DEPLOY_DIR/
 cp -r migrations/* $DEPLOY_DIR/migrations/
-cp config/nginx.conf /etc/openresty/nginx.conf
-cp config/ssl.lua /etc/openresty/lua.d/ssl.lua
+
+# Nginx config (auto-detect path)
+NGINX_CONF_DIR="/etc/nginx"
+if [ -d "/etc/openresty" ]; then
+    NGINX_CONF_DIR="/etc/openresty"
+fi
+cp config/nginx.conf $NGINX_CONF_DIR/nginx.conf
+cp config/ssl.lua $NGINX_CONF_DIR/lua.d/ssl.lua
+
+# Stream + reload script
+mkdir -p $NGINX_CONF_DIR/stream.d
+mkdir -p $DEPLOY_DIR/scripts
+cp config/reload-nginx.sh $DEPLOY_DIR/scripts/
+chmod 755 $DEPLOY_DIR/scripts/reload-nginx.sh
+chown root:root $DEPLOY_DIR/scripts/reload-nginx.sh
 
 echo -e "${GREEN}✓ Files copied${NC}"
 
@@ -137,6 +150,14 @@ usermod -aG redis vibeswaf
 chown -R openresty:openresty /etc/openresty
 chown -R openresty:openresty /opt/certs
 chmod -R 755 /opt/certs
+
+# Sudoers for nginx reload (vibeswaf → root)
+SUDOERS_FILE="/etc/sudoers.d/vibeswaf-reload"
+if [ ! -f "$SUDOERS_FILE" ]; then
+    echo "$DEPLOY_USER ALL=(root) NOPASSWD: $DEPLOY_DIR/scripts/reload-nginx.sh" > "$SUDOERS_FILE"
+    chmod 440 "$SUDOERS_FILE"
+    echo -e "${GREEN}✓ Sudoers for nginx reload installed${NC}"
+fi
 
 echo -e "${GREEN}✓ Permissions set${NC}"
 

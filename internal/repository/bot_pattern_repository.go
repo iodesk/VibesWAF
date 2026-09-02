@@ -166,6 +166,92 @@ func (r *BotPatternRepository) BulkDeletePatterns(ids []int) (int64, error) {
 	return n, nil
 }
 
+func (r *BotPatternRepository) BulkCreatePatterns(patterns []model.BotPattern) (int64, error) {
+	if len(patterns) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO bot_patterns (pattern_type, pattern, score, verify_ip, enabled, description)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	var count int64
+	for _, p := range patterns {
+		result, err := stmt.Exec(p.PatternType, p.Pattern, p.Score, p.VerifyIP, p.Enabled, p.Description)
+		if err != nil {
+			return count, err
+		}
+		n, _ := result.RowsAffected()
+		count += n
+	}
+
+	return count, tx.Commit()
+}
+
+func (r *BotPatternRepository) BulkUpdatePatterns(ids []int, patternType string, score *int, verifyIP *bool, enabled *bool) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	setClauses := []string{}
+	args := []interface{}{}
+	argIdx := 1
+
+	if patternType != "" {
+		setClauses = append(setClauses, fmt.Sprintf("pattern_type = $%d", argIdx))
+		args = append(args, patternType)
+		argIdx++
+	}
+	if score != nil {
+		setClauses = append(setClauses, fmt.Sprintf("score = $%d", argIdx))
+		args = append(args, *score)
+		argIdx++
+	}
+	if verifyIP != nil {
+		setClauses = append(setClauses, fmt.Sprintf("verify_ip = $%d", argIdx))
+		args = append(args, *verifyIP)
+		argIdx++
+	}
+	if enabled != nil {
+		setClauses = append(setClauses, fmt.Sprintf("enabled = $%d", argIdx))
+		args = append(args, *enabled)
+		argIdx++
+	}
+
+	if len(setClauses) == 0 {
+		return 0, nil
+	}
+
+	setClauses = append(setClauses, "updated_at = NOW()")
+
+	placeholders := make([]string, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", argIdx)
+		args = append(args, id)
+		argIdx++
+	}
+
+	query := `UPDATE bot_patterns SET ` + strings.Join(setClauses, ", ") +
+		` WHERE id IN (` + strings.Join(placeholders, ",") + `)`
+
+	result, err := r.db.Exec(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to bulk update bot patterns: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	return n, nil
+}
+
 
 func (r *BotPatternRepository) AddWhitelist(whitelist *model.BotWhitelist) error {
 	query := `

@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.7] - 2026-09-01
+
+### Security
+
+- Stream proxy now writes ClickHouse logs for all L4 TCP/UDP traffic (IP, host, action, reason, latency, geo enrichment). (`internal/stream/proxy.go`, `main.go`)
+- Stream proxy reads PROXY protocol header from nginx to log real client IP; graceful fallback to `conn.RemoteAddr()` when PROXY protocol not present. (`internal/stream/proxy.go`)
+- Nginx stream config generation now includes `proxy_protocol on` in server block (not upstream block). (`internal/stream/nginx.go`)
+- `GenerateConf` skips regeneration if conf file already exists — existing config is single source of truth. (`internal/stream/nginx.go`)
+- Backend rejects enabling Under Attack mode for TCP/UDP (stream) applications — returns 400 with descriptive error. (`internal/api/v1/handler/app_handler.go`)
+- Frontend disables Under Attack toggle for stream apps with tooltip explaining the restriction. (`frontend/src/pages/applications/Applications.tsx`)
+
+### Changed
+
+- Fix JA4 fingerprint not populating: added debug logging for `ja4.compute()` and `ja4.get()` failures in nginx.conf. (`config/nginx.conf`)
+- JA4 Fingerprint page: global all-time unique JA4 list with count, paginated (30/page), search filter. (`frontend/src/pages/monitoring/Fingerprints.tsx`, `internal/api/v1/handler/fingerprint_handler.go`)
+- JA4 Fingerprint export: CSV and JSON download buttons on Fingerprints page. (`internal/api/v1/handler/fingerprint_handler.go`, `frontend/src/pages/monitoring/Fingerprints.tsx`)
+- Bot Detector: merged single and bulk add into one "Add" dialog with textarea (one pattern per line); removed separate Bulk Add button. (`frontend/src/pages/security/BotDetector.tsx`)
+- Bot Detector: added bulk edit patterns (Type, Score, Verify IP, Status) with per-field apply toggle for selected items. (`frontend/src/pages/security/BotDetector.tsx`, `internal/api/v1/handler/bot_pattern_handler.go`)
+- Bot Detector: select all checkbox now selects all filtered patterns across all pages, not just current page. (`frontend/src/pages/security/BotDetector.tsx`)
+
+### Internal
+
+- Pipeline trace `RequestMetadata` (JA4, JA4H, UA hash, fingerprint) now populated after Phase 2 handlers run instead of before; previously these fields were always empty in ClickHouse traces. (`internal/pipeline/pipeline.go`, `internal/pipeline/context.go`)
+- Extracted `populateRequestMetadata()` helper to eliminate duplicate trace population logic between `Execute()` and `ExecuteWebSocketChecks()`. (`internal/pipeline/context.go`)
+
+### Performance
+
+- `RequestMetadata` allocation deferred until after Phase 2; hard-decision fast path skips allocation entirely when Phase 1 exits early. (`internal/pipeline/pipeline.go`)
+
 ## [1.0.6] - 2026-08-10
 
 ### Performance
@@ -186,3 +215,19 @@
 ### Internal
 
 - `ExtractClientIP()` / `ExtractClientIPStatic()` on `app.App`.
+
+## [1.0.8] - 2026-09-01
+
+### Changed
+
+- Stream (TCP/UDP) apps now route through Go backend instead of direct nginx-to-upstream. Client → Nginx (port 10000-19999) → Go (port 40000-49999) → upstream. (`internal/stream/nginx.go`, `internal/stream/proxy.go`)
+- Stream nginx config: added `ja4_stream_enable on`, per-app SSL certs, and `proxy_pass` to internal Go backend. (`internal/stream/nginx.go`)
+- Added `BackendPort` field to AppConfig for Go internal listener port (40000-49999). (`internal/domain/app/app.go`)
+- Added `StreamConfig` field to AppConfig for custom nginx stream directives. (`internal/domain/app/app.go`)
+- Stream apps: auto-resolve both ListenPort (10000-19999) and BackendPort (40000-49999) with conflict detection. (`internal/service/app_service.go`)
+- Frontend BasicTab: Stream apps now show Listen Port + Backend Port fields and a custom nginx config textarea. (`frontend/src/pages/applications/tabs/BasicTab.tsx`)
+
+- Stream config files use default cert fallback when domain cert not yet issued, allowing nginx to start before ACME completes. (`internal/stream/nginx.go`)
+- Removed `nginx -t` from stream setup — Go process runs non-root and can't test. Manual test on server instead. (`internal/service/app_service.go`)
+- Stream apps now auto-issue ACME cert via certService after nginx conf + Go proxy start. (`internal/service/app_service.go`)
+- Fixed STREAM_CONF_DIR default from `/etc/openresty/stream.d` to `/etc/nginx/stream.d`. Added `NGINX_BIN` env var for nginx path. (`internal/stream/nginx.go`, `.env.example`)

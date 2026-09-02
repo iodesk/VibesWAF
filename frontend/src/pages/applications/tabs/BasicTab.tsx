@@ -73,10 +73,32 @@ interface BasicTabProps {
   updateConfig: (key: keyof AppConfig, value: any) => void
 }
 
+function buildStreamTemplate(domain: string, listenPort: number | string, backendPort: number | string, _upstreamHost: string, _upstreamPort: number | string, scheme: string): string {
+  const lp = listenPort || 'PORT_AUTO'
+  const bp = backendPort || 'PORT_AUTO'
+  const d = domain || 'DOMAIN'
+  const udpLine = scheme === 'udp' ? ' udp' : ''
+
+  const upstreamName = d.replace(/\./g, '_').replace(/-/g, '_')
+
+  return `# app: ${d}
+upstream ${upstreamName} {
+    server 127.0.0.1:${bp};
+}
+
+server {
+    listen ${lp} ssl${udpLine};
+    ssl_certificate     /opt/certs/${d}/fullchain.pem;
+    ssl_certificate_key /opt/certs/${d}/key.pem;
+    proxy_pass ${upstreamName};
+    proxy_connect_timeout 10s;
+        proxy_timeout 10s;
+}`
+}
+
 export function BasicTab({ formData, isEdit, setFormData, updateConfig }: BasicTabProps) {
   const [idManuallyEdited, setIdManuallyEdited] = useState(false)
 
-  // Auto-generate app name from domain when user hasn't manually edited it
   const generateIdFromDomain = (domain: string): string => {
     if (!domain) return ''
     return domain
@@ -135,6 +157,21 @@ export function BasicTab({ formData, isEdit, setFormData, updateConfig }: BasicT
     next[index] = { ...next[index], [field]: value }
     updateConfig('upstreams', next)
   }
+
+  const isStream = formData.config.upstreams.length > 0 &&
+    (formData.config.upstreams[0].scheme === 'tcp' || formData.config.upstreams[0].scheme === 'udp')
+
+  const streamScheme = isStream ? formData.config.upstreams[0].scheme : 'tcp'
+  const streamUpstream = isStream ? formData.config.upstreams[0] : null
+
+  const streamTemplate = buildStreamTemplate(
+    formData.domain,
+    formData.config.listen_port || '',
+    formData.config.backend_port || '',
+    streamUpstream?.host || '',
+    streamUpstream?.port || '',
+    streamScheme
+  )
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -331,43 +368,89 @@ export function BasicTab({ formData, isEdit, setFormData, updateConfig }: BasicT
         </Card>
       </div>
 
-      {/* Listen Port (TCP/UDP only) */}
-      {formData.config.upstreams.length > 0 &&
-        (formData.config.upstreams[0].scheme === 'tcp' || formData.config.upstreams[0].scheme === 'udp') && (
+      {/* Stream Configuration (TCP/UDP only) */}
+      {isStream && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">Stream Listen Port</h2>
+          <h2 className="text-sm font-semibold text-foreground">Stream Configuration</h2>
           <Card className="shadow-none border-border">
-            <CardContent className="p-6 space-y-3">
+            <CardContent className="p-6 space-y-4">
               <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg border border-border">
                 <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                 <p className="text-[11px] text-foreground leading-relaxed font-medium">
-                  TCP/UDP apps require a dedicated port. Clients connect via{' '}
+                  Clients connect via{' '}
                   <code className="px-1 py-0.5 bg-muted rounded text-[14px] font-mono font-bold">
                     {formData.domain || 'domain.com'}:{formData.config.listen_port || 'auto'}
                   </code>
+                  {' '}&rarr; Nginx &rarr; Go backend &rarr; upstream
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Listen Port</Label>
-                <Input
-                  type="number"
-                  value={formData.config.listen_port || ''}
-                  onChange={(e) => updateConfig('listen_port', parseInt(e.target.value) || 0)}
-                  placeholder="Auto (leave empty)"
-                  className="h-9 text-xs border-input max-w-[200px]"
-                  min={10000}
-                  max={19999}
-                />
-                <p className="text-[10px] text-muted-foreground">Range 10000-19999. Leave empty for auto-assign.</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Listen Port (Nginx Public)</Label>
+                  <Input
+                    type="number"
+                    value={formData.config.listen_port || ''}
+                    onChange={(e) => updateConfig('listen_port', parseInt(e.target.value) || 0)}
+                    placeholder="10000-19999 (leave empty for auto)"
+                    className="h-9 text-xs border-input"
+                    min={10000}
+                    max={19999}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Nginx listens here. Clients connect to this port. Range 10000-19999.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Backend Port (Go Internal)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={formData.config.backend_port || ''}
+                      onChange={(e) => updateConfig('backend_port', parseInt(e.target.value) || 0)}
+                      placeholder="40000-49999 (leave empty for auto)"
+                      className="h-9 text-xs border-input"
+                      min={40000}
+                      max={49999}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Go WAF proxy listens here internally. Nginx proxies to 127.0.0.1:(backend_port). Range 40000-49999.</p>
+                </div>
               </div>
+
+              {/* Flow preview */}
+              <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground bg-muted/50 rounded-lg border border-border p-3">
+                <span className="font-bold text-foreground">Client</span>
+                <span>&rarr;</span>
+                <span className="text-blue-600 font-bold">{formData.domain || 'domain'}:{formData.config.listen_port || '?'}</span>
+                <span>&rarr;</span>
+                <span className="text-green-600 font-bold">Go :{formData.config.backend_port || '?'}</span>
+                <span>&rarr;</span>
+                <span className="font-bold text-foreground">{streamUpstream?.host || 'upstream'}:{streamUpstream?.port || '?'}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Custom Nginx Stream Config */}
+          <Card className="shadow-none border-border">
+            <CardContent className="p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nginx Stream Config</Label>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Full stream config template. Engine injects listen port, SSL, and proxy_pass on save. Edit freely.</p>
+                </div>
+              </div>
+              <textarea
+                value={formData.config.stream_config || streamTemplate}
+                onChange={(e) => updateConfig('stream_config', e.target.value)}
+                className="w-full h-72 rounded-lg border border-input bg-muted/30 px-3 py-2.5 text-xs font-mono text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                spellCheck={false}
+              />
             </CardContent>
           </Card>
         </div>
       )}
 
       {/* Health Check (HTTP/HTTPS only) */}
-      {!(formData.config.upstreams.length > 0 &&
-        (formData.config.upstreams[0].scheme === 'tcp' || formData.config.upstreams[0].scheme === 'udp')) && (
+      {!isStream && (
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">Health Check</h2>
         <Card className="shadow-none border-border">
@@ -424,8 +507,7 @@ export function BasicTab({ formData, isEdit, setFormData, updateConfig }: BasicT
       )}
 
       {/* HTTPS Redirect (HTTP/HTTPS only) */}
-      {!(formData.config.upstreams.length > 0 &&
-        (formData.config.upstreams[0].scheme === 'tcp' || formData.config.upstreams[0].scheme === 'udp')) && (
+      {!isStream && (
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">HTTPS Redirect</h2>
         <Card className="shadow-none border-border">

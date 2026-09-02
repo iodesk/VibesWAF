@@ -75,28 +75,12 @@ func (p *Pipeline) Execute(ctx *Context) error {
 	ctx.Normalized = Normalize(ctx)
 	ctx.RiskScore = NewRiskScore()
 	ctx.Trace = NewPipelineTrace()
-	ctx.Trace.Request = &RequestMetadata{
-		IP:              ctx.ClientIP,
-		Method:          ctx.Request.Method,
-		Path:            ctx.Request.URL.Path,
-		Host:            ctx.Request.Host,
-		UserAgent:       ctx.Request.UserAgent(),
-		HTTPFingerprint: ctx.HTTPFingerprint,
-		JA4:             ctx.GetExtraString("ja4"),
-		JA4H:            ctx.GetExtraString("ja4h"),
-		JA4H_UA_Hash:    ctx.GetExtraString("ja4h_ua_hash"),
-		ActualUA_Hash:   ctx.GetExtraString("actual_ua_hash"),
-	}
-	if uaMatch, ok := ctx.GetExtra("ua_match"); ok {
-		if match, ok := uaMatch.(bool); ok {
-			ctx.Trace.Request.UA_Match = match
-		}
-	}
 	start := time.Now()
 
 	// Phase 1: Deterministic hard rules — early exit on block/challenge
 	for _, h := range p.phase1 {
 		if err := h.Handle(ctx); err != nil {
+			ctx.populateRequestMetadata()
 			ctx.Trace.Phase = "HARD_RULE"
 			ctx.Trace.Decision = ctx.Action
 			ctx.PipelineDurationUS = time.Since(start).Microseconds()
@@ -106,6 +90,7 @@ func (p *Pipeline) Execute(ctx *Context) error {
 
 	// If Phase 1 made a hard decision, skip scoring
 	if ctx.HardDecision {
+		ctx.populateRequestMetadata()
 		ctx.PhaseExit = "phase1"
 		ctx.Trace.Phase = "HARD_RULE"
 		ctx.Trace.Decision = ctx.Action
@@ -138,6 +123,10 @@ func (p *Pipeline) Execute(ctx *Context) error {
 		p.enrichTraceWithWeights(ctx, p.scoringConfig)
 	}
 	ctx.RiskScore.ClampTotal()
+
+	// Populate request metadata AFTER Phase 2 so JA4/JA4H/fingerprint
+	// values set by protocol_anomaly_handler are captured in the trace.
+	ctx.populateRequestMetadata()
 
 	// Phase 3: Decision engine — evaluate total score
 	if err := p.phase3.Handle(ctx); err != nil {
@@ -172,35 +161,22 @@ func (p *Pipeline) ExecuteWebSocketChecks(ctx *Context) {
 	ctx.Normalized = Normalize(ctx)
 	ctx.RiskScore = NewRiskScore()
 	ctx.Trace = NewPipelineTrace()
-	ctx.Trace.Request = &RequestMetadata{
-		IP:              ctx.ClientIP,
-		Method:          ctx.Request.Method,
-		Path:            ctx.Request.URL.Path,
-		Host:            ctx.Request.Host,
-		UserAgent:       ctx.Request.UserAgent(),
-		HTTPFingerprint: ctx.HTTPFingerprint,
-		JA4:             ctx.GetExtraString("ja4"),
-		JA4H:            ctx.GetExtraString("ja4h"),
-		JA4H_UA_Hash:    ctx.GetExtraString("ja4h_ua_hash"),
-		ActualUA_Hash:   ctx.GetExtraString("actual_ua_hash"),
-	}
-	if uaMatch, ok := ctx.GetExtra("ua_match"); ok {
-		if match, ok := uaMatch.(bool); ok {
-			ctx.Trace.Request.UA_Match = match
-		}
-	}
 
 	// Run only Phase 1 handlers (IP rules, challenge validator, flood, rate limit)
 	// These are network-level checks that don't need request body.
 	for _, h := range p.phase1 {
 		if err := h.Handle(ctx); err != nil {
+			ctx.populateRequestMetadata()
 			return
 		}
 		// Stop if a hard decision was made (block/challenge)
 		if ctx.HardDecision {
+			ctx.populateRequestMetadata()
 			return
 		}
 	}
+
+	ctx.populateRequestMetadata()
 }
 
 func (p *Pipeline) applyWeights(ctx *Context) {

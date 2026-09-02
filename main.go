@@ -131,7 +131,7 @@ func main() {
 		appCfg.LogStartup("MaxMind: ok")
 	}
 
-	streamProxy := stream.NewProxy(ipAccessService)
+	streamProxy := stream.NewProxy(ipAccessService, clickhouseLogger, &maxmindAdapter{maxmind: maxmindService})
 	defer streamProxy.Close()
 	nginxManager := stream.NewNginxManager()
 
@@ -355,4 +355,26 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return val
 	}
 	return defaultValue
+}
+
+type maxmindAdapter struct {
+	maxmind interface {
+		Lookup(ip string) (*service.GeoIPResult, error)
+	}
+}
+
+func (m *maxmindAdapter) Lookup(ip string) (*stream.GeoResult, error) {
+	if m.maxmind == nil {
+		return nil, fmt.Errorf("maxmind not available")
+	}
+	r, err := m.maxmind.Lookup(ip)
+	if err != nil {
+		return nil, err
+	}
+	return &stream.GeoResult{
+		Country:     r.Country,
+		CountryCode: r.CountryCode,
+		ASN:         r.ASN,
+		ASNOrg:      r.ASNOrg,
+	}, nil
 }

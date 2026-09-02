@@ -273,6 +273,20 @@ class ApiClient {
         body: JSON.stringify({ ids }),
       });
     },
+
+    bulkCreate: (data: import('./types').BotPatternBulkCreateRequest): Promise<{ success: boolean; created: number; message: string }> => {
+      return this.request<{ success: boolean; created: number; message: string }>('/api/v1/bot-patterns/bulk-create', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    bulkUpdate: (data: import('./types').BotPatternBulkUpdateRequest): Promise<{ success: boolean; updated: number; message: string }> => {
+      return this.request<{ success: boolean; updated: number; message: string }>('/api/v1/bot-patterns/bulk-update', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
   };
 
   botIPRanges = {
@@ -502,6 +516,16 @@ class ApiClient {
     getCustomRuleIntel: (range: '5min' | '15min' | '1h' | '1d' | '7d' | '30d', appId?: string): Promise<CustomRuleIntelResponse> => {
       const q = appId ? `?range=${range}&app_id=${encodeURIComponent(appId)}` : `?range=${range}`
       return this.request<CustomRuleIntelResponse>(`/api/v1/analytics/threat-intel/custom-rules${q}`);
+    },
+
+    getJA4Fingerprints: (limit: number = 30, offset: number = 0): Promise<import('./types').JA4FingerprintResponse> => {
+      return this.request<import('./types').JA4FingerprintResponse>(
+        `/api/v1/analytics/fingerprints?limit=${limit}&offset=${offset}`
+      );
+    },
+
+    exportJA4Fingerprints: (format: 'csv' | 'json'): string => {
+      return `${this.baseUrl}/api/v1/analytics/fingerprints/export?format=${format}`;
     },
   };
 

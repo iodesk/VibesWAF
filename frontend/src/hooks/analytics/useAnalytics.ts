@@ -57,3 +57,11 @@ export function useWAFStats(range: ShortRange) {
     refetchInterval: 60_000,
   });
 }
+export function useJA4Fingerprints(limit: number = 30, offset: number = 0) {
+  return useQuery({
+    queryKey: ['analytics', 'fingerprints', limit, offset],
+    queryFn: () => wafApi.analytics.getJA4Fingerprints(limit, offset),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}

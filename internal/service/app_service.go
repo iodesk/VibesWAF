@@ -13,8 +13,6 @@ import (
 	"github.com/iodesk/VibesWAF/internal/stream"
 )
 
-// appSnapshot is the in-memory index of apps, swapped atomically on reload.
-// Reads on the request path are lock-free atomic pointer loads.
 type appSnapshot struct {
 	byDomain map[string]*app.App
 	byID     map[string]*app.App
@@ -28,8 +26,7 @@ type AppService struct {
 	streamProxy   *stream.Proxy
 	nginxManager  *stream.NginxManager
 
-	// snapshot is read via atomic load on every request — zero DB query.
-	snapshot unsafe.Pointer // *appSnapshot
+	snapshot unsafe.Pointer
 	stopCh   chan struct{}
 }
 
@@ -52,8 +49,6 @@ func (s *AppService) getSnapshot() *appSnapshot {
 	return (*appSnapshot)(atomic.LoadPointer(&s.snapshot))
 }
 
-// reloadSnapshot rebuilds the in-memory app index from the database and swaps
-// it atomically. Called at startup, on every mutation, and periodically.
 func (s *AppService) reloadSnapshot() {
 	apps, err := s.repo.ListAll()
 	if err != nil {
@@ -84,7 +79,6 @@ func (s *AppService) autoReload() {
 	}
 }
 
-// Stop terminates the background reload goroutine.
 func (s *AppService) Stop() {
 	select {
 	case <-s.stopCh:
@@ -102,6 +96,9 @@ func (s *AppService) CreateApp(a *app.App) error {
 		if err := s.resolveStreamPort(a); err != nil {
 			return err
 		}
+		if err := s.resolveStreamBackendPort(a); err != nil {
+			return err
+		}
 	}
 
 	if err := s.repo.Create(a); err != nil {
@@ -110,17 +107,16 @@ func (s *AppService) CreateApp(a *app.App) error {
 
 	s.reloadSnapshot()
 
-	config.GetAppConfig().LogInfo("[AppService] Created app: %s (domain: %s)", a.ID, a.Domain)
+	cfg := config.GetAppConfig()
+	cfg.LogInfo("[AppService] Created app: %s (domain: %s) listen=%d backend=%d", a.ID, a.Domain, a.Config.ListenPort, a.Config.BackendPort)
 
 	if a.IsStream() {
 		s.setupStream(a)
 	} else {
 		if s.acmeService != nil {
-			// Try to sync existing filesystem cert to DB first
 			if err := s.certService.SyncFromACME(a.Domain, a.ID); err != nil {
-				// No filesystem cert yet — create pending DB record and issue async
 				if err := s.certService.IssueDomain(a.Domain, a.ID); err != nil {
-					config.GetAppConfig().LogWarn("[AppService] Failed to auto-issue cert for %s: %v", a.Domain, err)
+					cfg.LogWarn("[AppService] Failed to auto-issue cert for %s: %v", a.Domain, err)
 				}
 			}
 		}
@@ -145,6 +141,9 @@ func (s *AppService) UpdateApp(a *app.App) error {
 
 	if a.IsStream() {
 		if err := s.resolveStreamPort(a); err != nil {
+			return err
+		}
+		if err := s.resolveStreamBackendPort(a); err != nil {
 			return err
 		}
 	}
@@ -226,15 +225,12 @@ func (s *AppService) ToggleUnderAttackMode(appID string, enabled bool) error {
 	return nil
 }
 
+// setupStream generates nginx conf with default cert, starts Go proxy, then
+// issues domain cert async. When cert arrives, nginx will pick it up on next
+// request (lua cache TTL) or on manual reload.
 func (s *AppService) setupStream(a *app.App) {
 	if err := s.nginxManager.GenerateConf(a); err != nil {
 		config.GetAppConfig().LogError("[AppService] Failed to generate stream conf: %v", err)
-		return
-	}
-
-	if err := s.nginxManager.TestConfig(); err != nil {
-		config.GetAppConfig().LogError("[AppService] Nginx config test failed, rolling back: %v", err)
-		s.nginxManager.RemoveConf(a.ID)
 		return
 	}
 
@@ -245,6 +241,14 @@ func (s *AppService) setupStream(a *app.App) {
 
 	if err := s.streamProxy.StartForApp(a); err != nil {
 		config.GetAppConfig().LogError("[AppService] Failed to start stream proxy: %v", err)
+	}
+
+	if s.acmeService != nil {
+		if err := s.certService.SyncFromACME(a.Domain, a.ID); err != nil {
+			if err := s.certService.IssueDomain(a.Domain, a.ID); err != nil {
+				config.GetAppConfig().LogWarn("[AppService] Failed to auto-issue stream cert for %s: %v", a.Domain, err)
+			}
+		}
 	}
 }
 
@@ -279,10 +283,23 @@ func (s *AppService) resolveStreamPort(a *app.App) error {
 		return nil
 	}
 
-	if err := s.checkPortConflict(a.ID, a.Config.ListenPort); err != nil {
-		return err
+	return s.checkPortConflict(a.ID, a.Config.ListenPort)
+}
+
+func (s *AppService) resolveStreamBackendPort(a *app.App) error {
+	minPort := app.StreamBackendMin()
+	maxPort := app.StreamBackendMax()
+
+	if a.Config.BackendPort == 0 {
+		port, err := s.findAvailableBackendPort(a.ID, minPort, maxPort)
+		if err != nil {
+			return err
+		}
+		a.Config.BackendPort = port
+		return nil
 	}
-	return nil
+
+	return s.checkBackendPortConflict(a.ID, a.Config.BackendPort)
 }
 
 func (s *AppService) findAvailablePort(excludeAppID string, minPort, maxPort int) (int, error) {
@@ -310,6 +327,31 @@ func (s *AppService) findAvailablePort(excludeAppID string, minPort, maxPort int
 	return 0, fmt.Errorf("no available port in range %d-%d", minPort, maxPort)
 }
 
+func (s *AppService) findAvailableBackendPort(excludeAppID string, minPort, maxPort int) (int, error) {
+	apps, err := s.repo.ListAll()
+	if err != nil {
+		return 0, fmt.Errorf("failed to check backend port availability: %w", err)
+	}
+
+	used := make(map[int]bool)
+	for _, existing := range apps {
+		if existing.ID == excludeAppID {
+			continue
+		}
+		if existing.IsStream() && existing.Config.BackendPort > 0 {
+			used[existing.Config.BackendPort] = true
+		}
+	}
+
+	for port := minPort; port <= maxPort; port++ {
+		if !used[port] {
+			return port, nil
+		}
+	}
+
+	return 0, fmt.Errorf("no available backend port in range %d-%d", minPort, maxPort)
+}
+
 func (s *AppService) checkPortConflict(excludeAppID string, port int) error {
 	apps, err := s.repo.ListAll()
 	if err != nil {
@@ -322,6 +364,24 @@ func (s *AppService) checkPortConflict(excludeAppID string, port int) error {
 		}
 		if existing.IsStream() && existing.Config.ListenPort == port {
 			return fmt.Errorf("port %d is already used by app %s (%s)", port, existing.ID, existing.Domain)
+		}
+	}
+
+	return nil
+}
+
+func (s *AppService) checkBackendPortConflict(excludeAppID string, port int) error {
+	apps, err := s.repo.ListAll()
+	if err != nil {
+		return fmt.Errorf("failed to check backend port conflict: %w", err)
+	}
+
+	for _, existing := range apps {
+		if existing.ID == excludeAppID {
+			continue
+		}
+		if existing.IsStream() && existing.Config.BackendPort == port {
+			return fmt.Errorf("backend port %d is already used by app %s (%s)", port, existing.ID, existing.Domain)
 		}
 	}
 

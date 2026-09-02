@@ -2,25 +2,27 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Shield, Plus, SquarePen, Trash2, CheckCircle2, Search, ChevronLeft, ChevronRight, Globe, Save, RefreshCw, Network } from 'lucide-react'
+import { Shield, Plus, SquarePen, Trash2, CheckCircle2, Search, ChevronLeft, ChevronRight, Globe, Save, RefreshCw, Network, Pencil } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { useBotPatterns, useCreateBotPattern, useUpdateBotPattern, useDeleteBotPattern, useBulkDeleteBotPatterns, useBotConfig, useUpdateBotConfig, useBotIPRanges, useCreateBotIPRange, useUpdateBotIPRange, useDeleteBotIPRange, useSyncBotIPRange, useTopBlockedBots } from '@/hooks/useApi'
+import { Textarea } from '@/components/ui/textarea'
+import { useBotPatterns, useUpdateBotPattern, useDeleteBotPattern, useBulkDeleteBotPatterns, useBulkCreateBotPatterns, useBulkUpdateBotPatterns, useBotConfig, useUpdateBotConfig, useBotIPRanges, useCreateBotIPRange, useUpdateBotIPRange, useDeleteBotIPRange, useSyncBotIPRange, useTopBlockedBots } from '@/hooks/useApi'
 import { useToast } from '@/components/ui/toast'
-import type { BotPattern, BotPatternRequest, BotConfig, BotIPRange, BotIPRangeRequest } from '@/lib/api-client'
+import type { BotPattern, BotPatternRequest, BotPatternBulkUpdateRequest, BotConfig, BotIPRange, BotIPRangeRequest } from '@/lib/api-client'
 
 export default function BotDetector() {
   const { data: patterns, isLoading: isPatternsLoading } = useBotPatterns()
   const { data: botConfig, isLoading: isConfigLoading } = useBotConfig()
   const { data: ipRanges, isLoading: isIPRangesLoading } = useBotIPRanges()
   const { data: topBlockedBotsData } = useTopBlockedBots()
-  const createPattern = useCreateBotPattern()
   const updatePattern = useUpdateBotPattern()
   const deletePattern = useDeleteBotPattern()
   const bulkDeletePatterns = useBulkDeleteBotPatterns()
+  const bulkCreatePatterns = useBulkCreateBotPatterns()
+  const bulkUpdatePatterns = useBulkUpdateBotPatterns()
   const updateBotConfig = useUpdateBotConfig()
   const createIPRange = useCreateBotIPRange()
   const updateIPRange = useUpdateBotIPRange()
@@ -51,6 +53,7 @@ export default function BotDetector() {
   const [isPatternDialogOpen, setIsPatternDialogOpen] = useState(false)
   const [isRulesDialogOpen, setIsRulesDialogOpen] = useState(false)
   const [isIPRangeDialogOpen, setIsIPRangeDialogOpen] = useState(false)
+  const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false)
 
   const [editingPattern, setEditingPattern] = useState<BotPattern | null>(null)
   const [patternFormData, setPatternFormData] = useState<BotPatternRequest>({
@@ -63,6 +66,27 @@ export default function BotDetector() {
   })
 
   const [editingIPRange, setEditingIPRange] = useState<BotIPRange | null>(null)
+
+  // Bulk Edit State
+  const [bulkEditForm, setBulkEditForm] = useState<{
+    apply_type: boolean
+    apply_score: boolean
+    apply_verify_ip: boolean
+    apply_enabled: boolean
+    pattern_type: 'good_bot' | 'bad_bot' | 'suspicious_ua' | 'bad_referer'
+    score: number
+    verify_ip: boolean
+    enabled: boolean
+  }>({
+    apply_type: false,
+    apply_score: false,
+    apply_verify_ip: false,
+    apply_enabled: false,
+    pattern_type: 'bad_bot',
+    score: 10,
+    verify_ip: false,
+    enabled: true
+  })
   const [ipRangeFormData, setIPRangeFormData] = useState<BotIPRangeRequest>({
     name: '',
     source_type: 'json_url',
@@ -145,8 +169,20 @@ export default function BotDetector() {
         await updatePattern.mutateAsync({ id: editingPattern.id, data: patternFormData })
         addToast('Pattern updated successfully', 'success')
       } else {
-        await createPattern.mutateAsync(patternFormData)
-        addToast('Pattern created successfully', 'success')
+        const lines = patternFormData.pattern.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+        if (lines.length === 0) {
+          addToast('Enter at least one pattern', 'error')
+          return
+        }
+        const result = await bulkCreatePatterns.mutateAsync({
+          patterns: lines,
+          pattern_type: patternFormData.pattern_type,
+          score: patternFormData.score,
+          verify_ip: patternFormData.verify_ip,
+          enabled: patternFormData.enabled,
+          description: patternFormData.description
+        })
+        addToast(result.message, 'success')
       }
       setIsPatternDialogOpen(false)
     } catch (error: any) {
@@ -192,16 +228,49 @@ export default function BotDetector() {
     }
   }
 
-  const toggleSelectAllPatterns = () => {
-    const pageIds = paginatedPatterns.map(p => p.id)
-    const allSelected = pageIds.every(id => selectedPatternIds.has(id))
-    const next = new Set(selectedPatternIds)
-    if (allSelected) {
-      pageIds.forEach(id => next.delete(id))
-    } else {
-      pageIds.forEach(id => next.add(id))
+  const handleBulkEdit = async () => {
+    const ids = Array.from(selectedPatternIds)
+    if (ids.length === 0) return
+
+    const updates: BotPatternBulkUpdateRequest = { ids }
+    if (bulkEditForm.apply_type) updates.pattern_type = bulkEditForm.pattern_type
+    if (bulkEditForm.apply_score) updates.score = bulkEditForm.score
+    if (bulkEditForm.apply_verify_ip) updates.verify_ip = bulkEditForm.verify_ip
+    if (bulkEditForm.apply_enabled) updates.enabled = bulkEditForm.enabled
+
+    if (!bulkEditForm.apply_type && !bulkEditForm.apply_score && !bulkEditForm.apply_verify_ip && !bulkEditForm.apply_enabled) {
+      addToast('Select at least one field to update', 'error')
+      return
     }
-    setSelectedPatternIds(next)
+
+    try {
+      const result = await bulkUpdatePatterns.mutateAsync(updates)
+      addToast(result.message, 'success')
+      setIsBulkEditDialogOpen(false)
+      setSelectedPatternIds(new Set())
+      setBulkEditForm({
+        apply_type: false,
+        apply_score: false,
+        apply_verify_ip: false,
+        apply_enabled: false,
+        pattern_type: 'bad_bot',
+        score: 10,
+        verify_ip: false,
+        enabled: true
+      })
+    } catch (error: any) {
+      addToast(error?.message || 'Failed to bulk update patterns', 'error')
+    }
+  }
+
+  const toggleSelectAllPatterns = () => {
+    const allFilteredIds = filteredPatterns.map(p => p.id)
+    const allSelected = allFilteredIds.every(id => selectedPatternIds.has(id))
+    if (allSelected) {
+      setSelectedPatternIds(new Set())
+    } else {
+      setSelectedPatternIds(new Set(allFilteredIds))
+    }
   }
 
   const toggleSelectPattern = (id: number) => {
@@ -690,16 +759,27 @@ export default function BotDetector() {
                     />
                   </div>
                   {selectedPatternIds.size > 0 && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="h-9 px-3 text-xs"
-                      onClick={handleBulkDeletePatterns}
-                      disabled={bulkDeletePatterns.isPending}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 sm:mr-1.5" />
-                      <span className="hidden sm:inline">Delete ({selectedPatternIds.size})</span>
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-9 px-3 text-xs border-border"
+                        onClick={() => setIsBulkEditDialogOpen(true)}
+                      >
+                        <Pencil className="w-3.5 h-3.5 sm:mr-1.5" />
+                        <span className="hidden sm:inline">Edit ({selectedPatternIds.size})</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-9 px-3 text-xs"
+                        onClick={handleBulkDeletePatterns}
+                        disabled={bulkDeletePatterns.isPending}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 sm:mr-1.5" />
+                        <span className="hidden sm:inline">Delete ({selectedPatternIds.size})</span>
+                      </Button>
+                    </>
                   )}
                   <Button size="sm" className="btn-primary hover:opacity-90 shadow-none h-9 px-3 text-xs flex-shrink-0" onClick={() => handleOpenPatternDialog()}>
                     <Plus className="w-3.5 h-3.5 sm:mr-1.5" />
@@ -718,7 +798,7 @@ export default function BotDetector() {
                       <input
                         type="checkbox"
                         className="rounded border-border"
-                        checked={paginatedPatterns.length > 0 && paginatedPatterns.every(p => selectedPatternIds.has(p.id))}
+                        checked={filteredPatterns.length > 0 && filteredPatterns.every(p => selectedPatternIds.has(p.id))}
                         onChange={toggleSelectAllPatterns}
                       />
                     </TableHead>
@@ -820,7 +900,7 @@ export default function BotDetector() {
                     className="text-[11px] text-primary hover:underline"
                     onClick={() => setSelectedPatternIds(new Set(filteredPatterns.map(p => p.id)))}
                   >
-                    Select all {filteredPatterns.length}
+                    Select all {filteredPatterns.length} matching
                   </button>
                 )}
               </div>
@@ -944,8 +1024,8 @@ export default function BotDetector() {
           className="max-w-2xl p-0 overflow-hidden border-none shadow-none"
         >
           <DialogHeader className="px-8 py-5 bg-muted/50 border-b border-border">
-            <DialogTitle className="text-lg font-bold text-foreground">{editingPattern ? 'Edit Detection Pattern' : 'Create Detection Pattern'}</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">Define a User-Agent or Referer substring and its associated threat level.</DialogDescription>
+            <DialogTitle className="text-lg font-bold text-foreground">{editingPattern ? 'Edit Detection Pattern' : 'Add Detection Patterns'}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">{editingPattern ? 'Update the pattern configuration.' : 'Define User-Agent or Referer substrings and their associated threat level.'}</DialogDescription>
           </DialogHeader>
 
           <div className="px-8 py-8 space-y-6 bg-card">
@@ -993,15 +1073,32 @@ export default function BotDetector() {
             </div>
 
             <div className="space-y-2.5">
-              <Label htmlFor="pattern" className="text-xs font-bold text-foreground uppercase tracking-wider">Pattern Substring</Label>
-              <Input
-                id="pattern"
-                value={patternFormData.pattern}
-                onChange={(e) => setPatternFormData({ ...patternFormData, pattern: e.target.value })}
-                placeholder="e.g. Googlebot, curl/, python-requests"
-                className="h-10 font-mono text-sm bg-background border-input"
-              />
-              <p className="text-[10px] text-muted-foreground italic">Matching is case-insensitive. Provide the unique part of the UA string or Referer domain.</p>
+              <Label htmlFor="pattern" className="text-xs font-bold text-foreground uppercase tracking-wider">
+                {editingPattern ? 'Pattern Substring' : 'Patterns (one per line)'}
+              </Label>
+              {editingPattern ? (
+                <Input
+                  id="pattern"
+                  value={patternFormData.pattern}
+                  onChange={(e) => setPatternFormData({ ...patternFormData, pattern: e.target.value })}
+                  placeholder="e.g. Googlebot, curl/, python-requests"
+                  className="h-10 font-mono text-sm bg-background border-input"
+                />
+              ) : (
+                <Textarea
+                  id="pattern"
+                  value={patternFormData.pattern}
+                  onChange={(e) => setPatternFormData({ ...patternFormData, pattern: e.target.value })}
+                  placeholder={"Googlebot\ncurl/\npython-requests\nSemrushBot"}
+                  rows={6}
+                  className="font-mono text-sm bg-background border-input resize-y"
+                />
+              )}
+              <p className="text-[10px] text-muted-foreground italic">
+                {editingPattern
+                  ? 'Matching is case-insensitive. Provide the unique part of the UA string or Referer domain.'
+                  : 'Enter one pattern substring per line. Matching is case-insensitive.'}
+              </p>
             </div>
 
             <div className="space-y-2.5">
@@ -1379,6 +1476,114 @@ export default function BotDetector() {
                 <Plus className="w-4 h-4 mr-2" />
               )}
               {editingIPRange ? 'Save' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Dialog */}
+      <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
+        <DialogContent className="max-w-lg p-0 overflow-hidden border-none shadow-none">
+          <DialogHeader className="px-8 py-5 bg-muted/50 border-b border-border">
+            <DialogTitle className="text-lg font-bold text-foreground">Bulk Edit Patterns</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Update {selectedPatternIds.size} selected pattern{selectedPatternIds.size !== 1 ? 's' : ''}. Check the fields you want to change.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-8 py-8 space-y-5 bg-card">
+            {/* Type */}
+            <div className="flex items-start gap-3 p-4 bg-muted/30 rounded-lg border border-border">
+              <input
+                type="checkbox"
+                className="rounded border-border mt-1"
+                checked={bulkEditForm.apply_type}
+                onChange={(e) => setBulkEditForm({ ...bulkEditForm, apply_type: e.target.checked })}
+              />
+              <div className="flex-1 space-y-2">
+                <Label className="text-xs font-bold text-foreground">Type</Label>
+                <select
+                  value={bulkEditForm.pattern_type}
+                  onChange={(e) => setBulkEditForm({ ...bulkEditForm, pattern_type: e.target.value as any })}
+                  disabled={!bulkEditForm.apply_type}
+                  className="flex h-9 w-full rounded border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring transition-all disabled:opacity-50"
+                >
+                  <option value="good_bot">Good Bot (Whitelisted)</option>
+                  <option value="bad_bot">Bad Bot (Block/Challenge)</option>
+                  <option value="bad_referer">Bad Referrer (Block/Challenge)</option>
+                  <option value="suspicious_ua">Suspicious (Higher Scrutiny)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Score */}
+            <div className="flex items-start gap-3 p-4 bg-muted/30 rounded-lg border border-border">
+              <input
+                type="checkbox"
+                className="rounded border-border mt-1"
+                checked={bulkEditForm.apply_score}
+                onChange={(e) => setBulkEditForm({ ...bulkEditForm, apply_score: e.target.checked })}
+              />
+              <div className="flex-1 space-y-2">
+                <Label className="text-xs font-bold text-foreground">Score</Label>
+                <Input
+                  type="number"
+                  value={bulkEditForm.score}
+                  onChange={(e) => setBulkEditForm({ ...bulkEditForm, score: parseInt(e.target.value) || 0 })}
+                  disabled={!bulkEditForm.apply_score}
+                  className="h-9 text-xs disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            {/* Verify IP */}
+            <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border">
+              <input
+                type="checkbox"
+                className="rounded border-border"
+                checked={bulkEditForm.apply_verify_ip}
+                onChange={(e) => setBulkEditForm({ ...bulkEditForm, apply_verify_ip: e.target.checked })}
+              />
+              <div className="flex-1 flex items-center justify-between">
+                <Label className="text-xs font-bold text-foreground">Verify IP (DNS)</Label>
+                <Switch
+                  checked={bulkEditForm.verify_ip}
+                  onCheckedChange={(v) => setBulkEditForm({ ...bulkEditForm, verify_ip: v })}
+                  disabled={!bulkEditForm.apply_verify_ip}
+                  className="data-[state=checked]:btn-primary"
+                />
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg border border-border">
+              <input
+                type="checkbox"
+                className="rounded border-border"
+                checked={bulkEditForm.apply_enabled}
+                onChange={(e) => setBulkEditForm({ ...bulkEditForm, apply_enabled: e.target.checked })}
+              />
+              <div className="flex-1 flex items-center justify-between">
+                <Label className="text-xs font-bold text-foreground">Status (Enabled)</Label>
+                <Switch
+                  checked={bulkEditForm.enabled}
+                  onCheckedChange={(v) => setBulkEditForm({ ...bulkEditForm, enabled: v })}
+                  disabled={!bulkEditForm.apply_enabled}
+                  className="data-[state=checked]:btn-primary"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="px-8 py-5 bg-muted/50 border-t border-border">
+            <Button variant="ghost" onClick={() => setIsBulkEditDialogOpen(false)} className="text-muted-foreground">Cancel</Button>
+            <Button
+              onClick={handleBulkEdit}
+              disabled={bulkUpdatePatterns.isPending}
+              className="px-8 btn-primary hover:opacity-90 transition-all active:scale-95 shadow-none"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {bulkUpdatePatterns.isPending ? 'Updating...' : 'Update All'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -111,6 +111,29 @@ func (ctx *Context) GetExtraString(key string) string {
 	return ""
 }
 
+// populateRequestMetadata builds the trace RequestMetadata from the current
+// context state. Called after Phase 2 so that JA4/JA4H/fingerprint values
+// set by protocol_anomaly_handler are captured in the trace.
+func (ctx *Context) populateRequestMetadata() {
+	ctx.Trace.Request = &RequestMetadata{
+		IP:              ctx.ClientIP,
+		Method:          ctx.Request.Method,
+		Path:            ctx.Request.URL.Path,
+		Host:            ctx.Request.Host,
+		UserAgent:       ctx.Request.UserAgent(),
+		HTTPFingerprint: ctx.HTTPFingerprint,
+		JA4:             ctx.GetExtraString("ja4"),
+		JA4H:            ctx.GetExtraString("ja4h"),
+		JA4H_UA_Hash:    ctx.GetExtraString("ja4h_ua_hash"),
+		ActualUA_Hash:   ctx.GetExtraString("actual_ua_hash"),
+	}
+	if uaMatch, ok := ctx.GetExtra("ua_match"); ok {
+		if match, ok := uaMatch.(bool); ok {
+			ctx.Trace.Request.UA_Match = match
+		}
+	}
+}
+
 // GetMetadata projects the typed signals (plus Extra) into a map for consumers
 // that require dynamic key access, principally the custom rule engine. It is
 // only invoked when a rule references a metadata-backed field, so the common

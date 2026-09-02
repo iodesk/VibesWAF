@@ -27,8 +27,9 @@ type AppConfig struct {
 	Upstreams   []Upstream `json:"upstreams"`
 	LBMethod    string     `json:"lb_method"`
 
-	ListenPort int `json:"listen_port,omitempty"`
-
+	ListenPort  int    `json:"listen_port,omitempty"`
+	BackendPort int    `json:"backend_port,omitempty"`
+	StreamConfig string `json:"stream_config,omitempty"`
 
 	RedirectHTTPS bool              `json:"redirect_https"`
 	RootRedirect  string            `json:"root_redirect,omitempty"`
@@ -43,7 +44,6 @@ type HealthCheckConfig struct {
 	Interval  int    `json:"interval"`
 	Threshold int    `json:"threshold"`
 }
-
 
 type ResponseHeader struct {
 	Name  string `json:"name"`
@@ -95,9 +95,8 @@ type CORSConfig struct {
 
 type CacheConfig struct {
 	Enabled bool `json:"enabled"`
-	TTL     int  `json:"ttl"`
+	TTL     int `json:"ttl"`
 }
-
 
 // ExtractClientIP returns the real client IP by walking X-Forwarded-For
 // from the rightmost untrusted proxy. If no trusted proxies are configured,
@@ -149,7 +148,7 @@ func (a *App) ExtractClientIP(r *http.Request) string {
 }
 
 // ExtractClientIPStatic is like ExtractClientIP but works with only trusted proxies list
-// (no App needed — for call sites that may not have a resolved app yet).
+// (no App needed — for call sites that may have a resolved app yet).
 func ExtractClientIPStatic(r *http.Request, trustedProxies []string) string {
 	xff := r.Header.Get("X-Forwarded-For")
 	if xff == "" {
@@ -188,7 +187,6 @@ func ExtractClientIPStatic(r *http.Request, trustedProxies []string) string {
 	}
 	return strings.TrimSpace(ips[0])
 }
-
 
 func (a *App) PickUpstream(clientIP string) *Upstream {
 	active := make([]Upstream, 0, len(a.Config.Upstreams))
@@ -280,6 +278,12 @@ func (a *App) Validate() error {
 		if a.Config.ListenPort != 0 && (a.Config.ListenPort < minPort || a.Config.ListenPort > maxPort) {
 			return fmt.Errorf("listen_port must be between %d and %d", minPort, maxPort)
 		}
+
+		backendMin := StreamBackendMin()
+		backendMax := StreamBackendMax()
+		if a.Config.BackendPort != 0 && (a.Config.BackendPort < backendMin || a.Config.BackendPort > backendMax) {
+			return fmt.Errorf("backend_port must be between %d and %d", backendMin, backendMax)
+		}
 	}
 
 	activeCount := 0
@@ -334,7 +338,6 @@ func (a *App) Validate() error {
 	return nil
 }
 
-
 type App struct {
 	ID          string
 	Domain      string
@@ -383,6 +386,25 @@ func StreamPortMax() int {
 	}
 	return 19999
 }
+
+func StreamBackendMin() int {
+	if val := os.Getenv("STREAM_BACKEND_MIN"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 40000
+}
+
+func StreamBackendMax() int {
+	if val := os.Getenv("STREAM_BACKEND_MAX"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 49999
+}
+
 func DefaultAppConfig() AppConfig {
 	return AppConfig{
 		LBMethod: "round-robin",
