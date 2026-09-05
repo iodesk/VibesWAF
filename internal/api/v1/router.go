@@ -661,6 +661,14 @@ func (rt *Router) handleAnalyticsRoutes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if strings.HasPrefix(path, "/api/v1/analytics/fingerprints/") && r.Method == http.MethodGet {
+		ja4 := path[len("/api/v1/analytics/fingerprints/"):]
+		if ja4 != "" && ja4 != "export" {
+			rt.fingerprintHandler.GetJA4Detail(w, r, ja4)
+			return
+		}
+	}
+
 	if path == "/api/v1/analytics/fingerprints/export" && r.Method == http.MethodGet {
 		rt.fingerprintHandler.ExportJA4Fingerprints(w, r)
 		return
@@ -728,6 +736,21 @@ func (rt *Router) handleCertificateRoutes(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if path == "/api/v1/certificates/wildcard/enable" && r.Method == http.MethodPost {
+		rt.certificateHandler.EnableWildcard(w, r)
+		return
+	}
+
+	if path == "/api/v1/certificates/wildcard/verify" && r.Method == http.MethodPost {
+		rt.certificateHandler.VerifyWildcardDNS(w, r)
+		return
+	}
+
+	if path == "/api/v1/certificates/wildcard/issue" && r.Method == http.MethodPost {
+		rt.certificateHandler.IssueWildcardCert(w, r)
+		return
+	}
+
 	if strings.HasSuffix(path, "/renew") && r.Method == http.MethodPost {
 		rt.certificateHandler.RenewCertificate(w, r)
 		return
@@ -745,6 +768,11 @@ func (rt *Router) handleCertificateRoutes(w http.ResponseWriter, r *http.Request
 
 	if strings.HasSuffix(path, "/logs") && r.Method == http.MethodGet {
 		rt.certificateHandler.GetCertificateLogs(w, r)
+		return
+	}
+
+	if strings.HasSuffix(path, "/wildcard/disable") && r.Method == http.MethodPost {
+		rt.certificateHandler.DisableWildcard(w, r)
 		return
 	}
 

@@ -5,7 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useSSLActions } from '@/hooks/ssl/useSSLActions';
 import { useToast } from '@/components/ui/toast';
-import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Eye, Trash2, AlertCircle } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Eye, Trash2, AlertCircle, Play } from 'lucide-react';
 import { CertificateDetailsDialog } from '@/components/ssl/CertificateDetailsDialog';
 import type { Certificate } from '@/lib/api-client';
 
@@ -17,7 +17,7 @@ interface CertificateTableProps {
 }
 
 export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }: CertificateTableProps) => {
-  const { renewCertificate, toggleAutoRenew, deleteCertificate, bulkDeleteCertificates, loading } = useSSLActions();
+  const { renewCertificate, toggleAutoRenew, deleteCertificate, bulkDeleteCertificates, issueWildcard, loading } = useSSLActions();
   const { addToast } = useToast();
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -99,6 +99,16 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
     }
   };
 
+  const handleRetryWildcard = async (domain: string) => {
+    try {
+      await issueWildcard(domain);
+      addToast('Wildcard certificate retry initiated', 'success');
+      onRefresh();
+    } catch (err: any) {
+      addToast(err?.message || 'Retry failed', 'error');
+    }
+  };
+
   const toggleSelectDomain = (domain: string) => {
     const newSelected = new Set(selectedDomains);
     if (newSelected.has(domain)) {
@@ -117,17 +127,35 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
     }
   };
 
-  const getStatusBadge = (status: string, isExpiringSoon: boolean) => {
-    if (status === 'expired') {
+  const getStatusBadge = (cert: Certificate) => {
+    if (cert.wildcard_enabled) {
+      const method = cert.wildcard_method === 'dns' ? 'DNS' : 'Persist';
+      if (cert.wildcard_status === 'active') {
+        return <Badge className="bg-purple-600/10 text-purple-600">Wildcard {method} Active</Badge>;
+      }
+      if (cert.wildcard_status === 'issuing') {
+        return <Badge className="bg-blue-600/10 text-blue-600">Wildcard {method} Issuing</Badge>;
+      }
+      if (cert.wildcard_status === 'txt_pending' || cert.wildcard_status === 'pending') {
+        return <Badge className="bg-yellow-600/10 text-yellow-600">Wildcard {method} Pending</Badge>;
+      }
+      if (cert.wildcard_status === 'dns_verified') {
+        return <Badge className="bg-blue-600/10 text-blue-600">Wildcard {method} Verified</Badge>;
+      }
+      if (cert.wildcard_status === 'failed') {
+        return <Badge variant="destructive">Wildcard {method} Failed</Badge>;
+      }
+    }
+    if (cert.status === 'expired') {
       return <Badge variant="destructive">Expired</Badge>;
     }
-    if (isExpiringSoon) {
+    if (cert.is_expiring_soon) {
       return <Badge variant="warning">Expiring Soon</Badge>;
     }
-    if (status === 'valid') {
+    if (cert.status === 'valid') {
       return <Badge className="bg-green-600/10 text-green-600">Valid</Badge>;
     }
-    return <Badge variant="secondary">{status}</Badge>;
+    return <Badge variant="secondary">{cert.status}</Badge>;
   };
 
   const getStatusIcon = (status: string, isExpiringSoon: boolean) => {
@@ -227,7 +255,7 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
                     </div>
                   </td>
                   <td className="py-4 pr-6">
-                    {getStatusBadge(cert.status, cert.is_expiring_soon)}
+                    {getStatusBadge(cert)}
                   </td>
                   <td className="py-4 pr-6 text-sm w-[160px]">
                     <div className="truncate w-[140px]" title={cert.issuer}>{cert.issuer}</div>
@@ -257,6 +285,17 @@ export const CertificateTable = ({ certificates, onRefresh, onDelete, onUpdate }
                   </td>
                   <td className="py-4">
                     <div className="flex items-center gap-2 whitespace-nowrap">
+                      {cert.wildcard_enabled && (cert.wildcard_status === 'failed' || cert.wildcard_status === 'txt_pending' || cert.wildcard_status === 'pending') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleRetryWildcard(cert.domain)}
+                          disabled={loading}
+                        >
+                          <Play className="w-4 h-4 mr-1" />
+                          Try
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"

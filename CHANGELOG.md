@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.8] - 2026-09-02
+
+### Changed
+
+- Wildcard SSL certificate support with two methods: DNS Persist (manual TXT once) and DNS Cloudflare (fully automatic). (`internal/acme/service.go`, `internal/service/certificate_service.go`)
+- SSL Manager: radio button to select wildcard method (Persist or DNS). (`frontend/src/pages/security/SSLManager.tsx`)
+- Certificate table shows wildcard method + status badges with "Try" button for failed/pending certs. (`frontend/src/components/ssl/CertificateTable.tsx`)
+- Nginx `ssl_dynamic_certificate_wildcard` enabled for automatic wildcard cert matching. (`config/nginx.conf`)
+- Backend API: 4 endpoints for wildcard lifecycle (enable with method, verify, issue, disable). (`internal/api/v1/handler/certificate_handler.go`, `internal/api/v1/router.go`)
+- DB: added `wildcard_enabled`, `wildcard_status`, `wildcard_method`, `persist_txt_value` columns to certificates table. (`internal/migration/init_postgres.sql`)
+- Domain validation: only `*.domain.com` or `*.sub.domain.com` accepted for wildcards.
+#
+- Fingerprint page: enriched table with Top User Agent, Unique IPs, Last Seen columns; click row to open detail side drawer (matching PipelineDrawer UX) with full breakdown (JA4H, HTTP Fingerprint, UA Match, top UAs/paths/IPs/hosts, first/last seen). (`frontend/src/pages/monitoring/Fingerprints.tsx`)
+- Fingerprint backend: main query now returns top 1 UA, uniqExact IPs, max(ts) per JA4; new detail endpoint `GET /api/v1/analytics/fingerprints/:ja4` with groupArray breakdown. (`internal/api/v1/handler/fingerprint_handler.go`)
+- Fingerprint pagination limit raised from 30 to 100. (`internal/api/v1/handler/fingerprint_handler.go`)
+- Fingerprint export updated with new fields (unique_ips, top_ua, last_seen). (`internal/api/v1/handler/fingerprint_handler.go`)
+
+### Security
+
+- Fix fingerprint query silent fail: ClickHouse Go driver cannot scan `Array(Nullable(String))` from `topK()`, replaced with scalar `any(ua)` for main/export queries and `groupArray()` for detail endpoint. (`internal/api/v1/handler/fingerprint_handler.go`)
+- Fix fingerprint query silent fail: `max(ts)` returns `DateTime64(3)` but struct expected `string`; cast via `toString()` in SQL. (`internal/api/v1/handler/fingerprint_handler.go`)
+- Fix fingerprint detail query full table scan: moved `WHERE` clause inside inner subquery to filter before aggregation. (`internal/api/v1/handler/fingerprint_handler.go`)
+- Fix fingerprint detail 404: replaced ClickHouse named parameter `{ja4:String}` with positional `?` to match driver usage pattern. (`internal/api/v1/handler/fingerprint_handler.go`)
+
 ## [1.0.7] - 2026-09-01
 
 ### Security

@@ -2,12 +2,15 @@ package service
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/iodesk/VibesWAF/internal/acme"
+	"github.com/iodesk/VibesWAF/internal/api/v1/dto"
 	"github.com/iodesk/VibesWAF/internal/config"
 	"github.com/iodesk/VibesWAF/internal/model"
 	"github.com/iodesk/VibesWAF/internal/repository"
@@ -76,6 +79,11 @@ func (s *CertificateService) IssueDomain(domain, appID string) error {
 
 	if _, err := s.repo.GetByDomain(domain); err == nil {
 		return fmt.Errorf("certificate for %s already exists", domain)
+	}
+
+	if s.acmeService.HasWildcardCertificate(domain) {
+		config.GetAppConfig().LogInfo("[CertService] Wildcard cert exists for %s, skipping issue", domain)
+		return nil
 	}
 
 	config.GetAppConfig().LogInfo("[CertService] Starting manual issue for %s", domain)
@@ -248,6 +256,13 @@ func (s *CertificateService) DeleteCertificate(domain string) error {
 		return fmt.Errorf("certificate not found: %w", err)
 	}
 
+	if cert.WildcardEnabled && s.acmeService != nil {
+		base := strings.TrimPrefix(domain, "*.")
+		s.acmeService.RemoveWildcard(base)
+	} else if s.acmeService != nil {
+		s.acmeService.RemoveCert(domain)
+	}
+
 	if err := s.repo.DeleteByDomain(domain); err != nil {
 		config.GetAppConfig().LogError("[CertService] Failed to delete certificate %s: %v", domain, err)
 		return fmt.Errorf("failed to delete certificate: %w", err)
@@ -277,11 +292,19 @@ func (s *CertificateService) BulkDeleteCertificates(domains []string) (int, erro
 func (s *CertificateService) SyncFromACME(domain, appID string) error {
 	config.GetAppConfig().LogDebug("[CertService] Syncing certificate for domain: %s", domain)
 	
-	// Check if certificate files exist
 	certPath := fmt.Sprintf("%s/%s/fullchain.pem", s.certDir, domain)
 	keyPath := fmt.Sprintf("%s/%s/key.pem", s.certDir, domain)
-	
+
 	if _, err := os.Stat(certPath); err != nil {
+		dotIdx := strings.Index(domain, ".")
+		if dotIdx > 0 {
+			parentDomain := domain[dotIdx+1:]
+			wildcardPath := fmt.Sprintf("%s/wildcard.%s/fullchain.pem", s.certDir, parentDomain)
+			if _, werr := os.Stat(wildcardPath); werr == nil {
+				config.GetAppConfig().LogInfo("[CertService] Found wildcard cert for %s (wildcard.%s)", domain, parentDomain)
+				return s.syncWildcardCert(parentDomain, appID)
+			}
+		}
 		config.GetAppConfig().LogInfo("[CertService] Certificate not yet issued for %s (will issue async)", domain)
 		return fmt.Errorf("certificate not found on filesystem: %w", err)
 	}
@@ -513,6 +536,9 @@ func (s *CertificateService) toCertificateInfo(cert *model.Certificate) *model.C
 		IsExpiringSoon:  isExpiringSoon,
 		LastRenewAt:     cert.LastRenewAt,
 		LastRenewStatus: cert.LastRenewStatus,
+		WildcardEnabled: cert.WildcardEnabled,
+		WildcardStatus:  cert.WildcardStatus,
+		WildcardMethod:  cert.WildcardMethod,
 	}
 }
 
@@ -565,4 +591,321 @@ func (s *CertificateService) logAction(certID int, domain, action, status, messa
 	if err := s.repo.CreateLog(log); err != nil {
 		config.GetAppConfig().LogError("[CertService] Failed to create log: %v", err)
 	}
+}
+
+var wildcardDomainRe = regexp.MustCompile(`^\*\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?){1,2}$`)
+
+func (s *CertificateService) EnableWildcard(domain string, method string) (*dto.WildcardSetupResponse, error) {
+	if s.acmeService == nil {
+		return nil, fmt.Errorf("ACME service not available - acme.sh not installed")
+	}
+
+	domain = strings.TrimPrefix(domain, "*.")
+
+	if !wildcardDomainRe.MatchString("*." + domain) {
+		return nil, fmt.Errorf("invalid domain: only *.domain.com or *.sub.domain.com are supported")
+	}
+
+	if method != "persist" && method != "dns" {
+		return nil, fmt.Errorf("invalid method: must be 'persist' or 'dns'")
+	}
+
+	if method == "dns" {
+		if os.Getenv("CF_Token") == "" || os.Getenv("CF_Email") == "" {
+			return nil, fmt.Errorf("CF_Token and CF_Email must be configured in .env for DNS wildcard method")
+		}
+	}
+
+	wildcardDomain := "*." + domain
+
+	cert, err := s.repo.GetByDomain(wildcardDomain)
+	if err != nil {
+		now := time.Now()
+		cert = &model.Certificate{
+			Domain:          wildcardDomain,
+			AppID:           "",
+			Status:          "pending",
+			Issuer:          "",
+			IssuedAt:        now,
+			ExpiresAt:       now,
+			AutoRenew:       true,
+			LastRenewStatus: "pending",
+			WildcardEnabled: true,
+			WildcardStatus:  "issuing",
+			WildcardMethod:  method,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if err := s.repo.Create(cert); err != nil {
+			return nil, fmt.Errorf("failed to create wildcard certificate record: %w", err)
+		}
+	} else if cert.WildcardStatus == "active" {
+		return nil, fmt.Errorf("wildcard certificate already active for %s", domain)
+	} else {
+		cert.WildcardEnabled = true
+		cert.WildcardStatus = "issuing"
+		cert.WildcardMethod = method
+		cert.UpdatedAt = time.Now()
+		if err := s.repo.Update(cert); err != nil {
+			return nil, fmt.Errorf("failed to update certificate: %w", err)
+		}
+	}
+
+	if method == "persist" {
+		config.GetAppConfig().LogInfo("[CertService] Generating DNS persist value for %s", domain)
+		txtName, txtValue, err := s.acmeService.MakePersistValue(domain)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate DNS persist value: %w", err)
+		}
+		if txtName == "" || txtValue == "" {
+			return nil, fmt.Errorf("failed to parse acme.sh output — TXT record not generated")
+		}
+		cert.WildcardStatus = "txt_pending"
+		cert.PersistTXTValue = txtValue
+		if err := s.repo.Update(cert); err != nil {
+			return nil, fmt.Errorf("failed to update certificate: %w", err)
+		}
+		s.logAction(cert.ID, wildcardDomain, "wildcard_enable", "txt_pending", "DNS persist value generated")
+		return &dto.WildcardSetupResponse{
+			Domain:         domain,
+			TXTName:        txtName,
+			TXTValue:       txtValue,
+			WildcardStatus: "txt_pending",
+		}, nil
+	}
+
+	config.GetAppConfig().LogInfo("[CertService] Enabling wildcard for %s via Cloudflare DNS", domain)
+	s.logAction(cert.ID, wildcardDomain, "wildcard_enable", "issuing", "Wildcard issue initiated via Cloudflare DNS-01")
+
+	onComplete := func(d string, err error) {
+		if err != nil {
+			config.GetAppConfig().LogError("[CertService] Wildcard issue failed for %s: %v", domain, err)
+			s.updateWildcardStatusAfterIssue(domain, "failed", err.Error())
+			return
+		}
+		s.updateWildcardStatusAfterIssue(domain, "success", "Wildcard certificate issued successfully")
+	}
+
+	if err := s.acmeService.IssueWildcardAsync(domain, "dns", onComplete); err != nil {
+		s.logAction(cert.ID, wildcardDomain, "wildcard_enable", "failed", err.Error())
+		cert.WildcardStatus = "failed"
+		s.repo.Update(cert)
+		return nil, fmt.Errorf("failed to issue wildcard certificate: %w", err)
+	}
+
+	return nil, nil
+}
+
+func (s *CertificateService) VerifyWildcardDNS(domain string) (bool, error) {
+	domain = strings.TrimPrefix(domain, "*.")
+	txtName := "_validation-persist." + domain
+
+	config.GetAppConfig().LogInfo("[CertService] Verifying DNS TXT record for %s", txtName)
+
+	lookups, err := net.LookupTXT(txtName)
+	if err != nil {
+		config.GetAppConfig().LogInfo("[CertService] DNS lookup failed for %s: %v", txtName, err)
+		return false, nil
+	}
+
+	for _, txt := range lookups {
+		if strings.Contains(txt, "accounturi") {
+			config.GetAppConfig().LogInfo("[CertService] DNS TXT verified for %s", txtName)
+			wildcardDomain := "*." + domain
+			cert, err := s.repo.GetByDomain(wildcardDomain)
+			if err == nil && cert.WildcardStatus == "txt_pending" {
+				cert.WildcardStatus = "dns_verified"
+				cert.UpdatedAt = time.Now()
+				s.repo.Update(cert)
+			}
+			return true, nil
+		}
+	}
+
+	config.GetAppConfig().LogInfo("[CertService] DNS TXT not found or invalid for %s", txtName)
+	return false, nil
+}
+
+func (s *CertificateService) IssueWildcardCert(domain string) error {
+	if s.acmeService == nil {
+		return fmt.Errorf("ACME service not available - acme.sh not installed")
+	}
+
+	domain = strings.TrimPrefix(domain, "*.")
+	wildcardDomain := "*." + domain
+
+	cert, err := s.repo.GetByDomain(wildcardDomain)
+	if err != nil {
+		return fmt.Errorf("wildcard certificate not found for %s", domain)
+	}
+
+	if cert.WildcardStatus == "active" {
+		return fmt.Errorf("wildcard certificate already active for %s", domain)
+	}
+
+	if cert.WildcardStatus != "dns_verified" && cert.WildcardStatus != "failed" {
+		return fmt.Errorf("DNS record not verified yet for %s", domain)
+	}
+
+	method := cert.WildcardMethod
+	if method == "" {
+		method = "persist"
+	}
+
+	if cert.WildcardStatus == "failed" {
+		s.acmeService.RemoveWildcard(domain)
+	}
+
+	config.GetAppConfig().LogInfo("[CertService] Starting wildcard issue for %s (method: %s)", domain, method)
+
+	cert.WildcardStatus = "issuing"
+	cert.UpdatedAt = time.Now()
+	if err := s.repo.Update(cert); err != nil {
+		return fmt.Errorf("failed to update certificate status: %w", err)
+	}
+
+	s.logAction(cert.ID, wildcardDomain, "wildcard_issue", "started", "Wildcard issue initiated")
+
+	onComplete := func(d string, err error) {
+		if err != nil {
+			config.GetAppConfig().LogError("[CertService] Wildcard issue failed for %s: %v", domain, err)
+			s.updateWildcardStatusAfterIssue(domain, "failed", err.Error())
+			return
+		}
+		s.updateWildcardStatusAfterIssue(domain, "success", "Wildcard certificate issued successfully")
+	}
+
+	if err := s.acmeService.IssueWildcardAsync(domain, method, onComplete); err != nil {
+		s.logAction(cert.ID, wildcardDomain, "wildcard_issue", "failed", err.Error())
+		cert.WildcardStatus = "failed"
+		s.repo.Update(cert)
+		return fmt.Errorf("failed to issue wildcard certificate: %w", err)
+	}
+
+	s.logAction(cert.ID, wildcardDomain, "wildcard_issue", "pending", "Issue request submitted")
+	return nil
+}
+
+func (s *CertificateService) DisableWildcard(domain string) error {
+	domain = strings.TrimPrefix(domain, "*.")
+	wildcardDomain := "*." + domain
+
+	cert, err := s.repo.GetByDomain(wildcardDomain)
+	if err != nil {
+		return fmt.Errorf("wildcard certificate not found for %s", domain)
+	}
+
+	cert.WildcardEnabled = false
+	cert.WildcardStatus = "none"
+	if err := s.repo.Update(cert); err != nil {
+		return fmt.Errorf("failed to update certificate: %w", err)
+	}
+
+	s.logAction(cert.ID, wildcardDomain, "wildcard_disable", "success", "Wildcard disabled")
+	config.GetAppConfig().LogInfo("[CertService] Wildcard disabled for %s", domain)
+	return nil
+}
+
+func (s *CertificateService) updateWildcardStatusAfterIssue(domain, newStatus, message string) {
+	wildcardDomain := "*." + domain
+	cert, err := s.repo.GetByDomain(wildcardDomain)
+	if err != nil {
+		config.GetAppConfig().LogError("[CertService] Failed to get wildcard cert after issue for %s: %v", domain, err)
+		return
+	}
+
+	certDir := "wildcard." + domain
+	certPath := fmt.Sprintf("%s/%s/fullchain.pem", s.certDir, certDir)
+	cmd := exec.Command("openssl", "x509", "-enddate", "-noout", "-in", certPath)
+	output, cerr := cmd.CombinedOutput()
+	if cerr == nil {
+		dateStr := strings.TrimPrefix(string(output), "notAfter=")
+		dateStr = strings.TrimSpace(dateStr)
+		if expiryDate, err := time.Parse("Jan 2 15:04:05 2006 MST", dateStr); err == nil {
+			cert.ExpiresAt = expiryDate
+		}
+		issuer, _ := s.getCertificateIssuer(certDir)
+		cert.Issuer = issuer
+	}
+
+	if newStatus == "success" {
+		cert.WildcardStatus = "active"
+		cert.Status = s.determineStatus(cert.ExpiresAt)
+	} else {
+		cert.WildcardStatus = "failed"
+	}
+
+	now := time.Now()
+	cert.LastRenewAt = &now
+	cert.LastRenewStatus = newStatus
+	cert.UpdatedAt = now
+
+	if err := s.repo.Update(cert); err != nil {
+		config.GetAppConfig().LogError("[CertService] Failed to update wildcard cert after issue for %s: %v", domain, err)
+		return
+	}
+
+	s.logAction(cert.ID, wildcardDomain, "wildcard_issue", newStatus, message)
+	config.GetAppConfig().LogInfo("[CertService] Wildcard certificate %s issued: %s", domain, newStatus)
+}
+
+func (s *CertificateService) syncWildcardCert(baseDomain, appID string) error {
+	wildcardDomain := "*." + baseDomain
+	certPath := fmt.Sprintf("%s/wildcard.%s/fullchain.pem", s.certDir, baseDomain)
+
+	cmd := exec.Command("openssl", "x509", "-enddate", "-noout", "-in", certPath)
+	output, cerr := cmd.CombinedOutput()
+	if cerr != nil {
+		return fmt.Errorf("failed to check wildcard certificate expiry: %w", cerr)
+	}
+
+	dateStr := strings.TrimPrefix(string(output), "notAfter=")
+	dateStr = strings.TrimSpace(dateStr)
+
+	expiryDate, err := time.Parse("Jan 2 15:04:05 2006 MST", dateStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse wildcard certificate expiry date: %w", err)
+	}
+
+	issuer, err := s.getCertificateIssuer("wildcard." + baseDomain)
+	if err != nil {
+		issuer = "Let's Encrypt"
+	}
+
+	cert, err := s.repo.GetByDomain(wildcardDomain)
+	if err != nil {
+		now := time.Now()
+		cert = &model.Certificate{
+			Domain:          wildcardDomain,
+			AppID:           appID,
+			Status:          s.determineStatus(expiryDate),
+			Issuer:          issuer,
+			IssuedAt:        now,
+			ExpiresAt:       expiryDate,
+			AutoRenew:       true,
+			LastRenewStatus: "success",
+			WildcardEnabled: true,
+			WildcardStatus:  "active",
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if err := s.repo.Create(cert); err != nil {
+			return fmt.Errorf("failed to create wildcard certificate record: %w", err)
+		}
+		s.logAction(cert.ID, wildcardDomain, "sync", "success", "Wildcard certificate synced from filesystem")
+	} else {
+		cert.Status = s.determineStatus(expiryDate)
+		cert.Issuer = issuer
+		cert.ExpiresAt = expiryDate
+		cert.WildcardEnabled = true
+		cert.WildcardStatus = "active"
+		cert.UpdatedAt = time.Now()
+		if err := s.repo.Update(cert); err != nil {
+			return fmt.Errorf("failed to update wildcard certificate record: %w", err)
+		}
+		s.logAction(cert.ID, wildcardDomain, "sync", "success", "Wildcard certificate updated from filesystem")
+	}
+
+	config.GetAppConfig().LogInfo("[CertService] Synced wildcard cert for %s (expires: %s)", baseDomain, expiryDate.Format("2006-01-02"))
+	return nil
 }

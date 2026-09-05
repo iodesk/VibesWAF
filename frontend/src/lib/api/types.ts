@@ -352,6 +352,9 @@ export interface Certificate {
   is_expiring_soon: boolean;
   last_renew_at?: string;
   last_renew_status: string;
+  wildcard_enabled: boolean;
+  wildcard_status: string;
+  wildcard_method: string;
 }
 
 export interface CertificateLog {
@@ -523,9 +526,39 @@ export interface IPReputationConfig {
 export interface JA4FingerprintEntry {
   ja4: string;
   count: number;
+  unique_ips: number;
+  top_ua: string;
+  last_seen: string;
 }
 
 export interface JA4FingerprintResponse {
   data: JA4FingerprintEntry[];
   total: number;
+}
+
+export interface JA4Detail {
+  ja4: string;
+  ja4h: string;
+  http_fingerprint: string;
+  ua_match: boolean;
+  count: number;
+  unique_ips: number;
+  top_ua: string[];
+  top_paths: string[];
+  top_ips: string[];
+  top_hosts: string[];
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface WildcardSetupResponse {
+  domain: string;
+  txt_name: string;
+  txt_value: string;
+  wildcard_status: string;
+}
+
+export interface WildcardVerifyResponse {
+  verified: boolean;
+  message: string;
 }

@@ -2,21 +2,31 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CertificateTable } from '@/components/ssl/CertificateTable';
 import { useSSLCertificates } from '@/hooks/ssl/useSSLCertificates';
 import { useSSLActions } from '@/hooks/ssl/useSSLActions';
-import { RefreshCw, Search, AlertTriangle, CheckCircle, Download, Plus } from 'lucide-react';
+import { RefreshCw, Search, AlertTriangle, CheckCircle, Download, Plus, Copy, Check } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonPage } from '@/components/shared/SkeletonLoading';
+import type { WildcardSetupResponse } from '@/lib/api-client';
 
 const SSLManager = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [newDomain, setNewDomain] = useState('');
+  const [useWildcard, setUseWildcard] = useState(false);
+  const [wildcardMethod, setWildcardMethod] = useState<'persist' | 'dns'>('persist');
   const [addError, setAddError] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [wizardDomain, setWizardDomain] = useState('');
+  const [wildcardSetup, setWildcardSetup] = useState<WildcardSetupResponse | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [issuing, setIssuing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { certificates, loading, error, refetch, removeCertificates, updateCertificate } = useSSLCertificates();
-  const { syncFromFilesystem, issueCertificate, loading: actionsLoading } = useSSLActions();
+  const { issueCertificate, enableWildcard, verifyWildcardDNS, issueWildcard, syncFromFilesystem, loading: actionsLoading } = useSSLActions();
   const { addToast } = useToast();
 
   const filteredCertificates = certificates.filter((cert) =>
@@ -27,7 +37,7 @@ const SSLManager = () => {
   const expiredCount = certificates.filter((c) => c.status === 'expired').length;
   const validCount = certificates.filter((c) => c.status === 'valid' && !c.is_expiring_soon).length;
 
-  const handleSync = async () => {
+  const handleSyncFilesystem = async () => {
     try {
       await syncFromFilesystem();
       addToast('Certificates synced from filesystem', 'success');
@@ -44,15 +54,88 @@ const SSLManager = () => {
       return;
     }
     setAddError(null);
+
+    if (useWildcard) {
+      const wildcardPattern = /^\*?\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?){1,2}$/;
+      const checkDomain = domain.startsWith('*.') ? domain : '*.' + domain;
+      if (!wildcardPattern.test(checkDomain)) {
+        setAddError('Only *.domain.com or *.sub.domain.com are supported');
+        return;
+      }
+      try {
+        const resp = await enableWildcard(domain, wildcardMethod);
+        if (wildcardMethod === 'dns' && !resp) {
+          addToast('Wildcard certificate issuance initiated', 'success');
+          handleCloseWizard();
+          refetch();
+          return;
+        }
+        setWizardDomain(domain);
+        setWildcardSetup(resp);
+        setWizardStep(1);
+      } catch (err: any) {
+        setAddError(err?.message || 'Failed to enable wildcard');
+      }
+      return;
+    }
+
     try {
       await issueCertificate(domain);
       addToast('Certificate issuance initiated', 'success');
-      setAddOpen(false);
-      setNewDomain('');
+      handleCloseWizard();
       refetch();
     } catch (err: any) {
       setAddError(err?.message || 'Failed to issue certificate');
     }
+  };
+
+  const handleVerifyDNS = async () => {
+    setVerifying(true);
+    try {
+      const resp = await verifyWildcardDNS(wizardDomain);
+      if (resp.verified) {
+        setWizardStep(2);
+        addToast('DNS record verified', 'success');
+      } else {
+        addToast(resp.message || 'DNS record not found yet. Wait 1-5 minutes and try again.', 'error');
+      }
+    } catch (err: any) {
+      addToast(err?.message || 'Verification failed', 'error');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleIssueWildcard = async () => {
+    setIssuing(true);
+    try {
+      await issueWildcard(wizardDomain);
+      addToast('Wildcard certificate issuance initiated', 'success');
+      setWizardStep(3);
+      refetch();
+    } catch (err: any) {
+      addToast(err?.message || 'Failed to issue wildcard certificate', 'error');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  const handleCopyValue = (value: string) => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCloseWizard = () => {
+    setAddOpen(false);
+    setNewDomain('');
+    setUseWildcard(false);
+    setWildcardMethod('persist');
+    setWizardStep(0);
+    setWizardDomain('');
+    setWildcardSetup(null);
+    setCopied(false);
+    setAddError(null);
   };
 
   if (loading) {
@@ -95,7 +178,7 @@ const SSLManager = () => {
               <Plus className="w-4 h-4 mr-2" />
               Add Domain
             </Button>
-            <Button onClick={handleSync} variant="outline" disabled={actionsLoading} className="flex-1 md:flex-none">
+            <Button onClick={handleSyncFilesystem} variant="outline" disabled={actionsLoading} className="flex-1 md:flex-none">
               <Download className="w-4 h-4 mr-2" />
               {actionsLoading ? 'Syncing...' : 'Sync'}
             </Button>
@@ -176,34 +259,202 @@ const SSLManager = () => {
         />
       </Card>
 
-      <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) { setNewDomain(''); setAddError(null); } }}>
+      <Dialog open={addOpen} onOpenChange={(open) => { if (!open) handleCloseWizard(); }}>
         <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="px-6 py-5 bg-muted border-b border-border">
-            <DialogTitle className="text-lg font-bold">Add SSL Domain</DialogTitle>
+            <DialogTitle className="text-lg font-bold">
+              {wizardStep === 0 && 'Add SSL Domain'}
+              {wizardStep === 1 && 'Wildcard DNS Setup — Step 1 of 2'}
+              {wizardStep === 2 && 'Wildcard DNS Setup — Step 2 of 2'}
+              {wizardStep === 3 && 'Wildcard Certificate Issued'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="px-6 py-6 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Domain</label>
-              <Input
-                placeholder="example.com"
-                value={newDomain}
-                onChange={(e) => { setNewDomain(e.target.value); setAddError(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddDomain(); }}
-                disabled={actionsLoading}
-              />
-              {addError && <p className="text-xs text-destructive">{addError}</p>}
+
+          {wizardStep === 0 && (
+            <div className="px-6 py-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Domain</label>
+                <Input
+                  placeholder="example.com"
+                  value={newDomain}
+                  onChange={(e) => { setNewDomain(e.target.value.replace(/^\*\./, '')); setAddError(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddDomain(); }}
+                  disabled={actionsLoading}
+                />
+                {addError && <p className="text-xs text-destructive">{addError}</p>}
+              </div>
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-medium">Use Wildcard DNS</label>
+                  <p className="text-xs text-muted-foreground">
+                    Issue *.domain cert via DNS challenge
+                  </p>
+                </div>
+                <Switch
+                  checked={useWildcard}
+                  onCheckedChange={setUseWildcard}
+                  disabled={actionsLoading}
+                />
+              </div>
+              {useWildcard && (
+                <div className="space-y-3 p-3 bg-muted/30 rounded-lg">
+                  <label className="text-xs font-medium text-muted-foreground">Method</label>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="wildcard-method"
+                        value="persist"
+                        checked={wildcardMethod === 'persist'}
+                        onChange={() => setWildcardMethod('persist')}
+                        className="mt-1"
+                      />
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-medium">DNS Persist</p>
+                        <p className="text-xs text-muted-foreground">
+                          Manual TXT record once, auto-renew forever. Zero API dependency.
+                        </p>
+                        <p className="text-xs text-yellow-600">
+                          Waiting for Let's Encrypt production support.
+                        </p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="wildcard-method"
+                        value="dns"
+                        checked={wildcardMethod === 'dns'}
+                        onChange={() => setWildcardMethod('dns')}
+                        className="mt-1"
+                      />
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-medium">DNS (Cloudflare)</p>
+                        <p className="text-xs text-muted-foreground">
+                          Fully automatic via Cloudflare API. Requires CF_Token and CF_Email in .env.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {!useWildcard
+                  ? "acme.sh will issue a Let's Encrypt certificate via standalone HTTP challenge on port 8080."
+                  : wildcardMethod === 'persist'
+                  ? 'DNS persist: requires 1 manual TXT record. Renewals fully automatic.'
+                  : 'Cloudflare DNS-01: fully automatic. No manual steps.'}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              acme.sh will issue a Let's Encrypt certificate via standalone HTTP challenge on port 8080. Make sure the domain points to this server and port 8080 is accessible.
-            </p>
-          </div>
+          )}
+
+          {wizardStep === 1 && wildcardSetup && (
+            <div className="px-6 py-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Add this TXT record to your DNS provider ({wildcardSetup.domain}):
+              </p>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="text-sm font-mono font-medium truncate">{wildcardSetup.txt_name}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => handleCopyValue(wildcardSetup.txt_name)} className="ml-2 flex-shrink-0">
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-xs text-muted-foreground">Type</p>
+                    <p className="text-sm font-mono font-medium">TXT</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-xs text-muted-foreground">Value</p>
+                    <p className="text-sm font-mono font-medium break-all leading-relaxed">{wildcardSetup.txt_value}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => handleCopyValue(wildcardSetup.txt_value)} className="ml-2 flex-shrink-0">
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                <p className="text-xs text-blue-800 dark:text-blue-200">
+                  <strong>DNS Provider:</strong> Add the TXT record above. Wait 1-5 minutes for propagation, then click Verify.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {wizardStep === 2 && (
+            <div className="px-6 py-6 space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-green-900 dark:text-green-100">DNS record verified</p>
+                  <p className="text-sm text-green-800 dark:text-green-200">
+                    Ready to issue wildcard certificate for *.{wizardDomain}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {wizardStep === 3 && (
+            <div className="px-6 py-6 space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-green-900 dark:text-green-100">Wildcard certificate issued!</p>
+                  <p className="text-sm text-green-800 dark:text-green-200">
+                    *.{wizardDomain} is now covered. Auto-renewal enabled.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <DialogFooter className="px-6 py-4 bg-muted/30 border-t border-border">
-            <Button variant="ghost" className="font-bold text-muted-foreground" onClick={() => setAddOpen(false)} disabled={actionsLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddDomain} disabled={actionsLoading || !newDomain.trim()} className="px-6 font-bold">
-              {actionsLoading ? 'Issuing...' : 'Issue Certificate'}
-            </Button>
+            {wizardStep === 0 && (
+              <>
+                <Button variant="ghost" className="font-bold text-muted-foreground" onClick={handleCloseWizard} disabled={actionsLoading}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddDomain} disabled={actionsLoading || !newDomain.trim()} className="px-6 font-bold">
+                  {actionsLoading ? 'Processing...' : 'Next'}
+                </Button>
+              </>
+            )}
+            {wizardStep === 1 && (
+              <>
+                <Button variant="ghost" className="font-bold text-muted-foreground" onClick={handleCloseWizard} disabled={verifying}>
+                  Cancel
+                </Button>
+                <Button onClick={handleVerifyDNS} disabled={verifying} className="px-6 font-bold">
+                  {verifying ? 'Checking...' : 'Verify DNS'}
+                </Button>
+              </>
+            )}
+            {wizardStep === 2 && (
+              <>
+                <Button variant="ghost" className="font-bold text-muted-foreground" onClick={handleCloseWizard} disabled={issuing}>
+                  Cancel
+                </Button>
+                <Button onClick={handleIssueWildcard} disabled={issuing} className="px-6 font-bold">
+                  {issuing ? 'Issuing...' : 'Issue Certificate'}
+                </Button>
+              </>
+            )}
+            {wizardStep === 3 && (
+              <Button onClick={handleCloseWizard} className="px-6 font-bold w-full">
+                Done
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

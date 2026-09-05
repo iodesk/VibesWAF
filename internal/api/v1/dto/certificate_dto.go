@@ -12,6 +12,9 @@ type CertificateResponse struct {
 	IsExpiringSoon  bool       `json:"is_expiring_soon"`
 	LastRenewAt     *time.Time `json:"last_renew_at,omitempty"`
 	LastRenewStatus string     `json:"last_renew_status"`
+	WildcardEnabled bool       `json:"wildcard_enabled"`
+	WildcardStatus  string     `json:"wildcard_status"`
+	WildcardMethod  string     `json:"wildcard_method"`
 }
 
 type CertificateLogResponse struct {
@@ -28,8 +31,9 @@ type RenewCertificateRequest struct {
 }
 
 type IssueCertificateRequest struct {
-	Domain string `json:"domain"`
-	AppID  string `json:"app_id,omitempty"`
+	Domain   string `json:"domain"`
+	AppID    string `json:"app_id,omitempty"`
+	Wildcard bool   `json:"wildcard,omitempty"`
 }
 
 type ToggleAutoRenewRequest struct {
@@ -48,4 +52,29 @@ type BulkDeleteResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 	Deleted int    `json:"deleted"`
+}
+
+type WildcardSetupRequest struct {
+	Domain string `json:"domain"`
+	Method string `json:"method"`
+}
+
+type WildcardSetupResponse struct {
+	Domain         string `json:"domain"`
+	TXTName        string `json:"txt_name"`
+	TXTValue       string `json:"txt_value"`
+	WildcardStatus string `json:"wildcard_status"`
+}
+
+type WildcardVerifyRequest struct {
+	Domain string `json:"domain"`
+}
+
+type WildcardIssueRequest struct {
+	Domain string `json:"domain"`
+}
+
+type WildcardVerifyResponse struct {
+	Verified bool   `json:"verified"`
+	Message  string `json:"message"`
 }

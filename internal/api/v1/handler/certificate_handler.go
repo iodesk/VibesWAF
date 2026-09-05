@@ -309,5 +309,122 @@ func toCertificateResponse(info *model.CertificateInfo) *dto.CertificateResponse
 		IsExpiringSoon:  info.IsExpiringSoon,
 		LastRenewAt:     info.LastRenewAt,
 		LastRenewStatus: info.LastRenewStatus,
+		WildcardEnabled: info.WildcardEnabled,
+		WildcardStatus:  info.WildcardStatus,
+		WildcardMethod:  info.WildcardMethod,
 	}
+}
+
+func (h *CertificateHandler) EnableWildcard(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	var req dto.WildcardSetupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Domain == "" {
+		respondError(w, http.StatusBadRequest, "Domain is required")
+		return
+	}
+
+	config.GetAppConfig().LogInfo("[CertHandler] Enable wildcard requested for %s (method: %s)", req.Domain, req.Method)
+
+	resp, err := h.certService.EnableWildcard(req.Domain, req.Method)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, resp)
+}
+
+func (h *CertificateHandler) VerifyWildcardDNS(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	var req dto.WildcardVerifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Domain == "" {
+		respondError(w, http.StatusBadRequest, "Domain is required")
+		return
+	}
+
+	config.GetAppConfig().LogInfo("[CertHandler] Verify wildcard DNS for %s", req.Domain)
+
+	verified, err := h.certService.VerifyWildcardDNS(req.Domain)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, dto.WildcardVerifyResponse{
+		Verified: verified,
+		Message:  map[bool]string{true: "DNS record verified", false: "DNS record not found or not propagated yet"}[verified],
+	})
+}
+
+func (h *CertificateHandler) IssueWildcardCert(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	var req dto.WildcardIssueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Domain == "" {
+		respondError(w, http.StatusBadRequest, "Domain is required")
+		return
+	}
+
+	config.GetAppConfig().LogInfo("[CertHandler] Issue wildcard certificate for %s", req.Domain)
+
+	if err := h.certService.IssueWildcardCert(req.Domain); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, dto.SuccessResponse{
+		Success: true,
+		Message: "Wildcard certificate issuance initiated",
+	})
+}
+
+func (h *CertificateHandler) DisableWildcard(w http.ResponseWriter, r *http.Request) {
+	if config.GetAppConfig().DemoMode {
+		respondError(w, http.StatusForbidden, "Restrict Demo Only")
+		return
+	}
+
+	domain := extractDomainFromPath(r.URL.Path, "/api/v1/certificates/")
+	if domain == "" {
+		respondError(w, http.StatusBadRequest, "Invalid domain")
+		return
+	}
+
+	config.GetAppConfig().LogInfo("[CertHandler] Disable wildcard for %s", domain)
+
+	if err := h.certService.DisableWildcard(domain); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, dto.SuccessResponse{
+		Success: true,
+		Message: "Wildcard disabled",
+	})
 }

@@ -1,6 +1,6 @@
 # VibesWAF
 
-A reverse proxy and WAF built for personal use and experimentation. Not production-hardened, not battle-tested: just a project to learn how WAFs work from the inside.
+Selfhosted reverse proxy and WAF with real time dashboard, multi phase threat scoring and managed OWASP CRS rules built in Go.
 
 <table>
   <tr>
@@ -16,7 +16,7 @@ A reverse proxy and WAF built for personal use and experimentation. Not producti
   <img src="https://img.shields.io/badge/PostgreSQL-14+-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/ClickHouse-F0F0F0?logo=clickhouse&logoColor=black" alt="ClickHouse" />
   <img src="https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white" alt="Redis" />
-  <img src="https://img.shields.io/badge/OpenResty-02303A?logo=lua&logoColor=white" alt="OpenResty" />
+  <img src="https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white" alt="Nginx" />
 </p>
 
 ---
@@ -43,10 +43,10 @@ Live demo at [vibeswaf.tailgo.com](https://vibeswaf.tailgo.com)
 
 ## How it works
 
-OpenResty 1.29.2.3 handles TLS termination and dynamic SSL (no restart). All WAF logic runs in Go.
+Nginx 1.30.4 handles TLS termination with dynamic SSL (no restart via [nginx-ssl-dynamic](https://github.com/iodesk/nginx-ssl-dynamic)) and JA4 fingerprinting via [ja4-nginx-module](https://github.com/iodesk/ja4-nginx-module). All WAF logic runs in Go.
 
 ```
-Request -> OpenResty (SSL) -> Go WAF Pipeline -> Phase 1 (Hard Rules) -> Phase 2 (Scoring) -> Phase 3 (Decision) -> Phase 4 (Response) -> Upstream
+Request -> Nginx 1.30.4 (SSL + JA4) -> Go WAF Pipeline -> Phase 1 (Hard Rules) -> Phase 2 (Scoring) -> Phase 3 (Decision) -> Phase 4 (Response) -> Upstream
 ```
 
 [Pipeline flow](docs/pipeline-flow.md) | [Phase 1: Hard Rules](docs/phase1-hard-rules.md) | [Phase 2: Scoring](docs/phase2-scoring.md) | [Phase 3: Decision](docs/phase3-decision.md) | [Challenge Trust Levels](docs/challenge-trust-levels.md)
@@ -66,7 +66,7 @@ Web UI managing all configuration  applications, security rules, rate limiter, b
 | Component | Role |
 |---|---|
 | Go | Core proxy + pipeline |
-| OpenResty 1.29.2.3 | TLS termination, JA4 fingerprinting via [lua-resty-ja4](https://github.com/nemethhh/lua-resty-ja4) |
+| Nginx 1.30.4 | TLS termination, JA4/JA4S/JA4H fingerprinting via [ja4-nginx-module](https://github.com/iodesk/ja4-nginx-module), dynamic SSL via [nginx-ssl-dynamic](https://github.com/iodesk/nginx-ssl-dynamic) |
 | Coraza + OWASP CRS | Managed WAF rules |
 | PostgreSQL | Config storage |
 | ClickHouse | Request logs + analytics |

@@ -13,6 +13,10 @@ type Certificate struct {
 	AutoRenew       bool      `json:"auto_renew" db:"auto_renew"`
 	LastRenewAt     *time.Time `json:"last_renew_at,omitempty" db:"last_renew_at"`
 	LastRenewStatus string    `json:"last_renew_status" db:"last_renew_status"`
+	WildcardEnabled bool      `json:"wildcard_enabled" db:"wildcard_enabled"`
+	WildcardStatus  string    `json:"wildcard_status" db:"wildcard_status"`
+	WildcardMethod  string    `json:"wildcard_method" db:"wildcard_method"`
+	PersistTXTValue string    `json:"persist_txt_value" db:"persist_txt_value"`
 	CreatedAt       time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -37,4 +41,7 @@ type CertificateInfo struct {
 	IsExpiringSoon  bool      `json:"is_expiring_soon"`
 	LastRenewAt     *time.Time `json:"last_renew_at,omitempty"`
 	LastRenewStatus string    `json:"last_renew_status"`
+	WildcardEnabled bool      `json:"wildcard_enabled"`
+	WildcardStatus  string    `json:"wildcard_status"`
+	WildcardMethod  string    `json:"wildcard_method"`
 }

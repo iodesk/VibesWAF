@@ -387,3 +387,11 @@ INSERT INTO bot_ip_ranges (name, source_type, url, ip_ranges, enabled, descripti
 ON CONFLICT (name) DO NOTHING;
 
 COMMIT;
+
+-- Migration: add wildcard DNS persist columns
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS wildcard_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS wildcard_status VARCHAR(20) NOT NULL DEFAULT 'none';
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS persist_txt_value TEXT NOT NULL DEFAULT '';
+
+-- Migration: add wildcard_method column
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS wildcard_method VARCHAR(10) NOT NULL DEFAULT '';

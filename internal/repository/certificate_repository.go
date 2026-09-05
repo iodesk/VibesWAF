@@ -21,8 +21,9 @@ func (r *CertificateRepository) Create(cert *model.Certificate) error {
 	query := `
 		INSERT INTO certificates (
 			domain, app_id, status, issuer, issued_at, expires_at, 
-			auto_renew, last_renew_status, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			auto_renew, last_renew_status, wildcard_enabled, wildcard_status, wildcard_method, persist_txt_value,
+			created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING cert_id
 	`
 
@@ -36,6 +37,10 @@ func (r *CertificateRepository) Create(cert *model.Certificate) error {
 		cert.ExpiresAt,
 		cert.AutoRenew,
 		cert.LastRenewStatus,
+		cert.WildcardEnabled,
+		cert.WildcardStatus,
+		cert.WildcardMethod,
+		cert.PersistTXTValue,
 		time.Now(),
 		time.Now(),
 	).Scan(&cert.ID)
@@ -52,8 +57,9 @@ func (r *CertificateRepository) Update(cert *model.Certificate) error {
 		UPDATE certificates SET
 			status = $1, issuer = $2, issued_at = $3, expires_at = $4,
 			auto_renew = $5, last_renew_at = $6, last_renew_status = $7,
-			updated_at = $8
-		WHERE cert_id = $9
+			wildcard_enabled = $8, wildcard_status = $9, wildcard_method = $10, persist_txt_value = $11,
+			updated_at = $12
+		WHERE cert_id = $13
 	`
 
 	result, err := r.db.Exec(
@@ -65,6 +71,10 @@ func (r *CertificateRepository) Update(cert *model.Certificate) error {
 		cert.AutoRenew,
 		cert.LastRenewAt,
 		cert.LastRenewStatus,
+		cert.WildcardEnabled,
+		cert.WildcardStatus,
+		cert.WildcardMethod,
+		cert.PersistTXTValue,
 		time.Now(),
 		cert.ID,
 	)
@@ -149,7 +159,8 @@ func (r *CertificateRepository) GetByID(id int) (*model.Certificate, error) {
 	query := `
 		SELECT
 			cert_id, domain, app_id, status, issuer, issued_at, expires_at,
-			auto_renew, last_renew_at, last_renew_status, created_at, updated_at
+			auto_renew, last_renew_at, last_renew_status, wildcard_enabled, wildcard_status, wildcard_method, persist_txt_value,
+			created_at, updated_at
 		FROM certificates
 		WHERE cert_id = $1
 	`
@@ -166,6 +177,10 @@ func (r *CertificateRepository) GetByID(id int) (*model.Certificate, error) {
 		&cert.AutoRenew,
 		&cert.LastRenewAt,
 		&cert.LastRenewStatus,
+		&cert.WildcardEnabled,
+		&cert.WildcardStatus,
+		&cert.WildcardMethod,
+		&cert.PersistTXTValue,
 		&cert.CreatedAt,
 		&cert.UpdatedAt,
 	)
@@ -184,7 +199,8 @@ func (r *CertificateRepository) GetByDomain(domain string) (*model.Certificate, 
 	query := `
 		SELECT
 			cert_id, domain, app_id, status, issuer, issued_at, expires_at,
-			auto_renew, last_renew_at, last_renew_status, created_at, updated_at
+			auto_renew, last_renew_at, last_renew_status, wildcard_enabled, wildcard_status, wildcard_method, persist_txt_value,
+			created_at, updated_at
 		FROM certificates
 		WHERE domain = $1
 	`
@@ -201,6 +217,10 @@ func (r *CertificateRepository) GetByDomain(domain string) (*model.Certificate, 
 		&cert.AutoRenew,
 		&cert.LastRenewAt,
 		&cert.LastRenewStatus,
+		&cert.WildcardEnabled,
+		&cert.WildcardStatus,
+		&cert.WildcardMethod,
+		&cert.PersistTXTValue,
 		&cert.CreatedAt,
 		&cert.UpdatedAt,
 	)
@@ -219,7 +239,8 @@ func (r *CertificateRepository) ListAll() ([]*model.Certificate, error) {
 	query := `
 		SELECT
 			cert_id, domain, app_id, status, issuer, issued_at, expires_at,
-			auto_renew, last_renew_at, last_renew_status, created_at, updated_at
+			auto_renew, last_renew_at, last_renew_status, wildcard_enabled, wildcard_status, wildcard_method, persist_txt_value,
+			created_at, updated_at
 		FROM certificates
 		ORDER BY expires_at ASC
 	`
@@ -245,6 +266,10 @@ func (r *CertificateRepository) ListAll() ([]*model.Certificate, error) {
 			&cert.AutoRenew,
 			&cert.LastRenewAt,
 			&cert.LastRenewStatus,
+			&cert.WildcardEnabled,
+			&cert.WildcardStatus,
+			&cert.WildcardMethod,
+			&cert.PersistTXTValue,
 			&cert.CreatedAt,
 			&cert.UpdatedAt,
 		); err != nil {
@@ -264,7 +289,8 @@ func (r *CertificateRepository) ListByAppID(appID string) ([]*model.Certificate,
 	query := `
 		SELECT
 			cert_id, domain, app_id, status, issuer, issued_at, expires_at,
-			auto_renew, last_renew_at, last_renew_status, created_at, updated_at
+			auto_renew, last_renew_at, last_renew_status, wildcard_enabled, wildcard_status, wildcard_method, persist_txt_value,
+			created_at, updated_at
 		FROM certificates
 		WHERE app_id = $1
 		ORDER BY expires_at ASC
@@ -291,6 +317,10 @@ func (r *CertificateRepository) ListByAppID(appID string) ([]*model.Certificate,
 			&cert.AutoRenew,
 			&cert.LastRenewAt,
 			&cert.LastRenewStatus,
+			&cert.WildcardEnabled,
+			&cert.WildcardStatus,
+			&cert.WildcardMethod,
+			&cert.PersistTXTValue,
 			&cert.CreatedAt,
 			&cert.UpdatedAt,
 		); err != nil {
@@ -429,4 +459,45 @@ func (r *CertificateRepository) DeleteAllExcept(keepDomain string) error {
 	query := `DELETE FROM certificates WHERE app_id NOT IN (SELECT app_id FROM applications WHERE domain = $1)`
 	_, err := r.db.Exec(query, keepDomain)
 	return err
+}
+
+func (r *CertificateRepository) GetWildcardByBaseDomain(baseDomain string) (*model.Certificate, error) {
+	wildcardDomain := "*." + baseDomain
+	query := `
+		SELECT
+			cert_id, domain, app_id, status, issuer, issued_at, expires_at,
+			auto_renew, last_renew_at, last_renew_status, wildcard_enabled, wildcard_status, wildcard_method, persist_txt_value,
+			created_at, updated_at
+		FROM certificates
+		WHERE domain = $1 AND wildcard_enabled = true
+	`
+
+	cert := &model.Certificate{}
+	err := r.db.QueryRow(query, wildcardDomain).Scan(
+		&cert.ID,
+		&cert.Domain,
+		&cert.AppID,
+		&cert.Status,
+		&cert.Issuer,
+		&cert.IssuedAt,
+		&cert.ExpiresAt,
+		&cert.AutoRenew,
+		&cert.LastRenewAt,
+		&cert.LastRenewStatus,
+		&cert.WildcardEnabled,
+		&cert.WildcardStatus,
+		&cert.WildcardMethod,
+		&cert.PersistTXTValue,
+		&cert.CreatedAt,
+		&cert.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("wildcard certificate not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get wildcard certificate: %w", err)
+	}
+
+	return cert, nil
 }

@@ -35,6 +35,8 @@ import type {
   IPReputationEntry,
   IPReputationEntryRequest,
   IPReputationConfig,
+  WildcardSetupResponse,
+  WildcardVerifyResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -518,9 +520,15 @@ class ApiClient {
       return this.request<CustomRuleIntelResponse>(`/api/v1/analytics/threat-intel/custom-rules${q}`);
     },
 
-    getJA4Fingerprints: (limit: number = 30, offset: number = 0): Promise<import('./types').JA4FingerprintResponse> => {
+    getJA4Fingerprints: (limit: number = 100, offset: number = 0): Promise<import('./types').JA4FingerprintResponse> => {
       return this.request<import('./types').JA4FingerprintResponse>(
         `/api/v1/analytics/fingerprints?limit=${limit}&offset=${offset}`
+      );
+    },
+
+    getJA4Detail: (ja4: string): Promise<import('./types').JA4Detail> => {
+      return this.request<import('./types').JA4Detail>(
+        `/api/v1/analytics/fingerprints/${encodeURIComponent(ja4)}`
       );
     },
 
@@ -593,6 +601,33 @@ class ApiClient {
           body: JSON.stringify({ domains }),
         }
       );
+    },
+
+    enableWildcard: (domain: string, method: string): Promise<WildcardSetupResponse | null> => {
+      return this.request<WildcardSetupResponse>('/api/v1/certificates/wildcard/enable', {
+        method: 'POST',
+        body: JSON.stringify({ domain, method }),
+      });
+    },
+
+    verifyWildcardDNS: (domain: string): Promise<WildcardVerifyResponse> => {
+      return this.request<WildcardVerifyResponse>('/api/v1/certificates/wildcard/verify', {
+        method: 'POST',
+        body: JSON.stringify({ domain }),
+      });
+    },
+
+    issueWildcard: (domain: string): Promise<SuccessResponse> => {
+      return this.request<SuccessResponse>('/api/v1/certificates/wildcard/issue', {
+        method: 'POST',
+        body: JSON.stringify({ domain }),
+      });
+    },
+
+    disableWildcard: (domain: string): Promise<SuccessResponse> => {
+      return this.request<SuccessResponse>(`/api/v1/certificates/${domain}/wildcard/disable`, {
+        method: 'POST',
+      });
     },
   };
 }
