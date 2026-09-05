@@ -85,10 +85,3 @@ cd frontend && cp .env.example .env && bun install && bun run build  # frontend
 See `config/` for nginx, systemd, and ACME scripts.
 
 ---
-
-## Caveats
-
-* Personal project. No SLA.
-* Code assisted by AI. Architecture designed by hand.
-* Test coverage is partial.
-* Not designed for multi-tenant.
