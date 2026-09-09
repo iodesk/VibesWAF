@@ -60,7 +60,7 @@ Request -> Nginx 1.30.4 (SSL + JA4) -> Go WAF Pipeline -> Phase 1 (Hard Rules) -
 
 Web UI managing all configuration  applications, security rules, rate limiter, bot detector, WAF engine, IP reputation, scoring engine, logs, and analytics.
 
-[`Apps`](screenshot/2.%20App-basic.png) [`Security Rules`](screenshot/2.%20App-security-rules.png) [`Rate Limiter`](screenshot/4.%20Rate%20limiter%20-%20Food%20protection.png) [`Bot Detector`](screenshot/5.%20Bot%20Detector.png) [`WAF`](screenshot/3.%20Waf%20Settings.png) [`IP Reputation`](screenshot/6.%20IP%20Reputation.png) [`Scoring`](screenshot/8.%20Scoring.png) [`Logs`](screenshot/10.%20Logs.png) [`Analytics`](screenshot/12.%20Threat%20Inteligence.png)
+[`Apps`](screenshot/2.%20App-basic.png) [`Security Rules`](screenshot/2.%20App-security-rules.png) [`Rate Limiter`](screenshot/4.%20Rate%20limiter%20-%20Food%20protection.png) [`Bot Detector`](screenshot/5.%20Bot%20Detector.png) [`WAF`](screenshot/3.%20Waf%20Settings.png) [`IP Reputation`](screenshot/6.%20IP%20Reputation.png) [`Scoring`](screenshot/8.%20Scoring.png) [`Logs`](screenshot/10.%20Logs.png) [`Analytics`](screenshot/12.%20Threat%20Inteligence.png) [`JA4 Fingerprint`](screenshot/13.JA4-Fingerprint-Detail.png)
 
 ---
 
@@ -88,3 +88,10 @@ cd frontend && cp .env.example .env && bun install && bun run build  # frontend
 See `config/` for nginx, systemd, and ACME scripts.
 
 ---
+
+## Caveats
+
+* Personal project. No SLA.
+* Code assisted by AI. Architecture designed by hand.
+* Test coverage is partial.
+* Not designed for multi-tenant.
