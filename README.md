@@ -4,8 +4,11 @@ Selfhosted reverse proxy and WAF with real time dashboard, multi phase threat sc
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshot/overview-dash.png" alt="Dashboard Overview" width="100%" /></td>
-    <td width="50%"><img src="screenshot/overview-logs.png" alt="Logs Overview" width="100%" /></td>
+    <td colspan="2"><img src="screenshot/Live-Latency.png" alt="Live Latency" width="100%" /></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><p><strong>JA4 Fingerprint</strong></p><img src="screenshot/overview-ja4.png" alt="JA4 Overview" width="100%" /></td>
+    <td width="50%" align="center"><p><strong>Logs Overview</strong></p><img src="screenshot/overview-logs.png" alt="Logs Overview" width="100%" /></td>
   </tr>
 </table>
 
