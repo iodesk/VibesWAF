@@ -33,6 +33,7 @@ type WAFHandler struct {
 	appConfig      AppConfig
 	flood          *ratelimit.FloodProtector
 	trustedHistory *handlers.TrustedHistoryScorer
+	webSocketLimit *ratelimit.WebSocketLimiter
 }
 
 
@@ -45,7 +46,7 @@ type AppConfig interface {
 }
 
 
-func NewWAFHandler(wafService *service.WAFService, appService *service.AppService, logger *logger.Clickhouse, p *pipeline.Pipeline, maxmind *service.MaxMindService, appConfig AppConfig, flood *ratelimit.FloodProtector, trustedHistory *handlers.TrustedHistoryScorer) *WAFHandler {
+func NewWAFHandler(wafService *service.WAFService, appService *service.AppService, logger *logger.Clickhouse, p *pipeline.Pipeline, maxmind *service.MaxMindService, appConfig AppConfig, flood *ratelimit.FloodProtector, trustedHistory *handlers.TrustedHistoryScorer, wsLimit *ratelimit.WebSocketLimiter) *WAFHandler {
 	return &WAFHandler{
 		wafService:     wafService,
 		appService:     appService,
@@ -55,6 +56,7 @@ func NewWAFHandler(wafService *service.WAFService, appService *service.AppServic
 		appConfig:      appConfig,
 		flood:          flood,
 		trustedHistory: trustedHistory,
+		webSocketLimit: wsLimit,
 	}
 }
 
@@ -181,7 +183,7 @@ if resolvedApp != nil && resolvedApp.Config.RootRedirect != "" && r.URL.Path == 
 			return
 		}
 
-		// Run Phase 1 partial: IP Access + Flood
+		// Run Phase 1 partial: IP Access + Flood + general rate limit
 		h.pipeline.ExecuteWebSocketChecks(ctx)
 
 		if ctx.Action == "block" {
@@ -199,6 +201,12 @@ if resolvedApp != nil && resolvedApp.Config.RootRedirect != "" && r.URL.Path == 
 		if !isValidWebSocketUpgrade(r) {
 			h.appConfig.LogDebug("[WS] Invalid WebSocket upgrade headers from %s", ctx.ClientIP)
 			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+
+		if h.webSocketLimit != nil && !h.webSocketLimit.Allow(appID, ctx.ClientIP) {
+			h.appConfig.LogInfo("[WS] WebSocket upgrade rate limited app=%s ip=%s", appID, ctx.ClientIP)
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 			return
 		}
 
@@ -474,12 +482,11 @@ func (h *WAFHandler) proxyToUpstream(w http.ResponseWriter, r *http.Request, app
 		}
 	}
 
+	// Baseline security headers, then per-app overrides on top.
+	applySecurityHeaders(w, r)
+
 	if application != nil {
-		for _, h := range application.Config.Advanced.AddHeaders {
-			if h.Name != "" {
-				w.Header().Set(h.Name, h.Value)
-			}
-		}
+		applyAppResponseHeaders(w, application)
 
 		if !application.Config.Advanced.ProxyBuffering {
 			w.Header().Set("X-Accel-Buffering", "no")

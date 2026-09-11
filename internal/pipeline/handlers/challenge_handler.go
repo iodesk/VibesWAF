@@ -64,6 +64,11 @@ func (h *ChallengeHandler) serveChallenge(ctx *pipeline.Context) {
 	}
 
 	data := h.store.Create(ct)
+	if data == nil {
+		h.appCfg.LogError("[CHALLENGE] Failed to generate secure challenge data")
+		http.Error(ctx.Writer, "Unable to generate challenge", http.StatusServiceUnavailable)
+		return
+	}
 
 	target, _ := data.Payload["target"].(int)
 

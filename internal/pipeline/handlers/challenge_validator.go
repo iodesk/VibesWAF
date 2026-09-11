@@ -13,19 +13,36 @@ import (
 	"time"
 
 	"github.com/iodesk/VibesWAF/internal/config"
+	"github.com/iodesk/VibesWAF/internal/model"
 	"github.com/iodesk/VibesWAF/internal/pipeline"
 	"github.com/iodesk/VibesWAF/internal/service"
 )
 
+// challengeSignatureHexLen is the length of a full HMAC-SHA256 signature.
+// Shorter signatures are rejected: accepting a truncated digest would allow a
+// downgrade attack against the cookie verification.
+const challengeSignatureHexLen = 64
+
+// challengeClockSkew tolerates a small clock difference between the WAF host
+// and the client when validating the cookie timestamp.
+const challengeClockSkew = 60
+
+type botConfigProvider interface {
+	GetConfig() model.BotConfig
+}
+
 type ChallengeValidator struct {
-	botService *service.BotDetectionService
+	botService botConfigProvider
 	appCfg     *config.AppConfig
 	secret     string
 	hmacPool   sync.Pool
 }
 
 func NewChallengeValidator(botService *service.BotDetectionService) *ChallengeValidator {
-	secret := os.Getenv("WAF_SECRET")
+	return newChallengeValidator(botService, os.Getenv("WAF_SECRET"))
+}
+
+func newChallengeValidator(botService botConfigProvider, secret string) *ChallengeValidator {
 	if secret == "" {
 		secret = "fallback_secret"
 	}
@@ -77,56 +94,52 @@ func (h *ChallengeValidator) Handle(ctx *pipeline.Context) error {
 func (h *ChallengeValidator) verifyCookie(cookieValue, clientIP, userAgent string) (int, bool) {
 	parts := strings.Split(cookieValue, ".")
 
-	// Support both old format (sig.ts) and new format (sig.ts.level)
-	if len(parts) < 2 || len(parts) > 3 {
+	// Only the current format (sig.ts.level) is accepted. The legacy
+	// two-part cookie is refused so a downgrade cannot bypass the trust level.
+	if len(parts) != 3 {
 		return 0, false
 	}
 
 	signature := parts[0]
 	timestampStr := parts[1]
 
+	if len(signature) != challengeSignatureHexLen {
+		return 0, false
+	}
+
 	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
 	if err != nil {
 		return 0, false
 	}
 
-	var trustLevel int
-	if len(parts) == 3 {
-		tl, err := strconv.Atoi(parts[2])
-		if err != nil || tl < 0 || tl > 3 {
-			return 0, false
-		}
-		trustLevel = tl
+	trustLevel, err := strconv.Atoi(parts[2])
+	if err != nil || trustLevel < 0 || trustLevel > 3 {
+		return 0, false
 	}
 
 	botCfg := h.botService.GetConfig()
 	maxAge := int64(botCfg.ChallengeDuration)
 
-	if time.Now().Unix()-timestamp > maxAge {
+	now := time.Now().Unix()
+	if now-timestamp > maxAge {
 		h.appCfg.LogDebug("[VALIDATOR] Cookie expired")
+		return 0, false
+	}
+	if timestamp-now > challengeClockSkew {
+		h.appCfg.LogDebug("[VALIDATOR] Cookie timestamp is in the future")
 		return 0, false
 	}
 
 	// Verify HMAC with trust_level included in payload
-	var payload string
-	if len(parts) == 3 {
-		payload = fmt.Sprintf("%s:%s:%d:%d", clientIP, userAgent, timestamp, trustLevel)
-	} else {
-		// Backward compatible: old cookie without trust_level
-		payload = fmt.Sprintf("%s:%s:%d", clientIP, userAgent, timestamp)
-	}
+	payload := fmt.Sprintf("%s:%s:%d:%d", clientIP, userAgent, timestamp, trustLevel)
 
 	hm := h.hmacPool.Get().(hash.Hash)
 	hm.Reset()
 	hm.Write([]byte(payload))
 	expectedFull := hex.EncodeToString(hm.Sum(nil))
 	h.hmacPool.Put(hm)
-	expectedSignature := expectedFull
-	if len(signature) == 32 {
-		expectedSignature = expectedFull[:32]
-	}
 
-	if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
+	if !hmac.Equal([]byte(signature), []byte(expectedFull)) {
 		return 0, false
 	}
 

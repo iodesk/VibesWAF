@@ -12,15 +12,28 @@ import (
 )
 
 const trustedHistoryKeyPrefix = "th:"
+const trustedHistoryCooldownKeyPrefix = "th:cooldown:"
 const trustedHistoryTTL = 24 * time.Hour
+const trustedHistoryCooldown = time.Second
+
+type trustedHistoryRedis interface {
+	IsEnabled() bool
+	GetInt(context.Context, string) (int64, error)
+	Del(context.Context, string) error
+	IncrWithCooldown(context.Context, string, string, time.Duration, time.Duration) (bool, error)
+}
 
 type TrustedHistoryScorer struct {
 	getConfig func() *model.ScoringConfig
-	redis     *cache.RedisClient
+	redis     trustedHistoryRedis
 	appCfg    *config.AppConfig
 }
 
 func NewTrustedHistoryScorer(getConfig func() *model.ScoringConfig, redis *cache.RedisClient) *TrustedHistoryScorer {
+	return newTrustedHistoryScorer(getConfig, redis)
+}
+
+func newTrustedHistoryScorer(getConfig func() *model.ScoringConfig, redis trustedHistoryRedis) *TrustedHistoryScorer {
 	return &TrustedHistoryScorer{
 		getConfig: getConfig,
 		redis:     redis,
@@ -86,7 +99,8 @@ func (h *TrustedHistoryScorer) RecordCleanRequest(ip string) {
 		return
 	}
 	key := trustedHistoryKeyPrefix + ip
-	h.redis.Incr(context.Background(), key, trustedHistoryTTL)
+	cooldownKey := trustedHistoryCooldownKeyPrefix + ip
+	_, _ = h.redis.IncrWithCooldown(context.Background(), key, cooldownKey, trustedHistoryTTL, trustedHistoryCooldown)
 }
 
 // ResetHistory resets the trusted history counter for an IP.
@@ -96,5 +110,8 @@ func (h *TrustedHistoryScorer) ResetHistory(ip string) {
 		return
 	}
 	key := trustedHistoryKeyPrefix + ip
-	h.redis.Del(context.Background(), key)
+	cooldownKey := trustedHistoryCooldownKeyPrefix + ip
+	ctx := context.Background()
+	_ = h.redis.Del(ctx, key)
+	_ = h.redis.Del(ctx, cooldownKey)
 }

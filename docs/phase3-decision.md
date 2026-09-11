@@ -83,6 +83,7 @@ After Phase 3 (or directly after Phase 1 if hard decision), Phase 4 handlers ren
 - If no block/challenge action → request proxied to upstream
 - Pooled HTTP transport with keep-alive
 - 32KB buffer pool for body copy
+- Baseline security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, plus HSTS on TLS) are applied to every proxied response, overriding upstream values; per-app `add_headers` override them when a different policy is needed. CSP/COOP/Permissions-Policy are left to per-app config (values are app-specific)
 
 ---
 

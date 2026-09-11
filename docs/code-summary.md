@@ -61,7 +61,7 @@ fields + a lazily-allocated `Extra` map).
 
 | File | Function |
 |------|----------|
-| `pipeline.go` | Orchestrator. `Execute()` runs the Phase 1 loop → if `HardDecision` skip to Phase 4 → else Phase 2 → apply caps/multipliers → `ClampTotal()` → Phase 3 → Phase 4. `ExecuteWebSocketChecks()` = Phase 1 subset for WS upgrades. |
+| `pipeline.go` | Orchestrator. `Execute()` runs the Phase 1 loop → if `HardDecision` skip to Phase 4 → else Phase 2 → apply caps/multipliers → `ClampTotal()` → Phase 3 → Phase 4. `ExecuteWebSocketChecks()` = Phase 1 subset for WS upgrades (the handler additionally applies the WS upgrade rate limiter). |
 | `context.go` | `Context` = shared state. `AddDecision` (rank-resolve), `AddScore`, `GetMetadata()` (lazy map only for the rule engine), phase flags (`HardDecision`, `IPRuleTerminal`, `ChallengePassed`, `SkipModules`). |
 | `decision.go` | `Decision{Action,Source,Reason}` + `ResolveDecision` (rank: block=4 > challenge=3 > allow=2 > log=1). |
 | `decision_engine.go` | **Phase 3.** Reads total score, compares `Block`/`Challenge` thresholds, sets action. |
@@ -73,8 +73,10 @@ fields + a lazily-allocated `Extra` map).
 
 ### 3.3 Phase Handlers — `internal/pipeline/handlers/`
 **Phase 1 (Hard Rules):**
-- `challenge_validator.go` — Checks the `ok` cookie (HMAC over `IP:UA:ts[:level]`
-  with `WAF_SECRET`). Valid → `ChallengePassed=true`, skips many handlers.
+- `challenge_validator.go` — Checks the `ok` cookie (full HMAC-SHA256 over `IP:UA:ts:level`
+  with `WAF_SECRET`). Only the 3-part format is accepted; legacy 2-part cookies and
+  truncated signatures are rejected, and future timestamps beyond 60s skew are refused.
+  Valid → `ChallengePassed=true`, skips many handlers.
 - `ip_access_handler.go` — `ipAccessService.CheckIPInMemory` (in-memory CIDR lookup, zero DB query). Match → decision +
   `IPRuleTerminal=true` + `HardDecision=true` (skips Rate/Flood/Cache/Rules/WAF).
 - `flood_handler.go` — `FloodProtector` (attack/error/basic limits). Breach →
@@ -94,13 +96,16 @@ fields + a lazily-allocated `Extra` map).
   `waf_anomaly` score.
 - `protocol_anomaly_handler.go` — Self-reloading (atomic pointer, 30s ticker).
   Checks header inconsistency, cookie anomaly, JA4 anomaly (HTTP/1.0 browser UA,
-  old TLS, UA↔JA4H hash mismatch).
+  TLS 1.0/1.1 for any client via `ja4_old_tls`, UA↔JA4H hash mismatch). Stored
+  configs are merged with current defaults on read, so new rules apply without a
+  dashboard save.
 - `trust_scorer.go` — Only if `ChallengePassed`. Negative reduction from
   `TrustLevels.Reductions[level]` (0/-5/-10/-15).
 - `stable_session_scorer.go` — Redis `ss:<ip>` (JA4+FP, 4h TTL). Match →
   negative `trust` reduction.
 - `trusted_history_scorer.go` — Redis `th:<ip>` counter. N clean requests →
-  reduction. `RecordCleanRequest()` (on allow) / `ResetHistory()` (on block/challenge).
+  reduction. `RecordCleanRequest()` (on allow, max one increment per
+  `th:cooldown:<ip>` window) / `ResetHistory()` (on block/challenge, clears both keys).
 - `challenge_handler.go` — **Phase 4.** block → 403; challenge → serve slider
   page (maxAttempts/TTL from store); allow → proxy. Skipped if `ChallengePassed`.
 - `helpers.go` — `toResult()`, `joinReasons()`.
@@ -110,6 +115,10 @@ fields + a lazily-allocated `Extra` map).
   `data/coraza-crs`, builds directives (paranoia level, thresholds, disabled
   rules, custom rules). `ProcessRequest()` returns `WAFResult{AnomalyScore,
   MatchedRules}` (categorized by ID range, skips correlation-only 949110–949113).
+  Request bodies are buffered for inspection up to `maxBodyInspectionBytes`
+  (128KB); the inspected prefix is replayed ahead of the unread remainder, so
+  memory stays bounded while the proxy still forwards the full payload. Chunked
+  requests (unknown length) are inspected too.
 - **`rules/`** — Custom Security Rule DSL:
   - `fields.go` — FieldRegistry (ip.src, http.host/path/ua, asn, country, ...).
     *(TODO: `client.os`/`client.browser` extractors stubbed to `""`, `req.rate`
@@ -123,7 +132,8 @@ fields + a lazily-allocated `Extra` map).
 ### 3.5 Challenge System — `internal/challenge/`
 Server-side slider CAPTCHA.
 - `challenge.go` — `ChallengeType` interface, `ChallengeData`, `Registry`.
-- `slider.go` — target random 20–80, tolerance 4, min solve 1500ms.
+- `slider.go` — target random 20–80 from `crypto/rand` (rejection sampling),
+  tolerance 4, min solve 1500ms. Returns nil when entropy is unavailable.
 - `store.go` — In-memory map (cap 100k), per-IP rate limit (5/hour), cleanup.
 - `trajectory.go` — `AnalyzeTrajectory`/`AnalyzeSignals` → trust level 0–3
   (reductions [0,-5,-10,-15]).
@@ -133,7 +143,8 @@ Server-side slider CAPTCHA.
   → `ctx.HTTPFingerprint`.
 - **`ratelimit/`** — `flood.go` (256 lock-free shards, basic/attack/error/
   challenged), `token_bucket.go` (per-key, cap 500k), `memory.go` (sliding
-  window), `key.go` (SHA-1(ip+ua)).
+  window), `key.go` (SHA-1(ip+ua)), `websocket.go` (WS upgrade limiter per
+  app+IP, budget from dashboard basic profile, fails closed on invalid config).
 
 ### 3.7 ACME / SSL — `internal/acme/`
 `service.go` — TLS provisioning via acme.sh (standalone :8080). Single-worker
@@ -173,6 +184,10 @@ queue, issues/renews/installs to `certDir/<domain>/`. Out of the WAF request pat
   IPReputation, Settings (live-reload WAF + invalidate cache), Analytics (11
   ClickHouse aggregations), Certificates, performance, cache.
   *(TODO: `test_handler.go` is orphaned, not wired into the router.)*
+- **`api/v1/handler/security_headers.go`** — Baseline hardening headers
+  (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, HSTS on TLS only)
+  applied to every proxied response, overriding upstream values; per-app
+  `add_headers` win. CSP/COOP/Permissions-Policy stay per-app (app-specific values).
 - **`transport/proxy_transport.go`** — Pooled `http.Transport` (MaxIdle 256,
   per-host 64, HTTP/2) + 32KB buffer pool for streaming proxy bodies.
 - **`stream/`** — `proxy.go` (native Go TCP/UDP listener per stream app) +

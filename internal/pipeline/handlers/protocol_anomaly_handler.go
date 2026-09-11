@@ -315,51 +315,50 @@ func (h *ProtocolAnomalyHandler) isCookieTimestampFuture(value string) bool {
 	return timestamp > time.Now().Unix()+60
 }
 
-// compareUAFromJA4H extracts UA hash from JA4H and compares with actual UA hash
-// JA4H format: ja4h_[version]_[ua_hash]_[accept]_[accept_enc]_[accept_lang]
-// The UA hash is the second segment after "ja4h_"
-func (h *ProtocolAnomalyHandler) compareUAFromJA4H(ctx *pipeline.Context, ja4h, actualUA string) {
-	if ja4h == "" || actualUA == "" {
-		return
+// setFingerprintHashes extracts header names hash from JA4H and computes UA hash,
+// then sets context keys for display and stable session tracking.
+//
+// JA4H format: ja4h_<A>_<B>_<C>_<D>
+//   B = SHA256(header names in request order), 12 hex ← parts[2], header names hash
+//   C = SHA256(cookie names sorted), 12 hex
+//   D = SHA256(cookie values sorted), 12 hex
+//
+// This function extracts B (header hash) for stable session fingerprinting,
+// and computes a separate UA hash for real UA consistency tracking.
+func (h *ProtocolAnomalyHandler) setFingerprintHashes(ctx *pipeline.Context, ja4h string) {
+	// Extract header names hash from JA4H (parts[2] = B segment)
+	headerHash := extractHeaderHashFromJA4H(ja4h)
+	if headerHash != "" {
+		ctx.SetExtra("ja4h_header_hash", headerHash)
 	}
 
-	ja4hUAHash := extractUAHashFromJA4H(ja4h)
-	if ja4hUAHash == "" {
-		return
+	// Compute UA hash from current request
+	uaHash := hashUAValue(ctx.Normalized.UA)
+	if uaHash != "" {
+		ctx.SetExtra("ua_hash", uaHash)
 	}
-
-	// Hash actual UA with same algorithm (SHA256 first 12 chars for JA4H format)
-	actualUAHash := hashUA(actualUA)
-
-	if actualUAHash == "" {
-		return
-	}
-
-	ctx.SetExtra("ja4h_ua_hash", ja4hUAHash)
-	ctx.SetExtra("actual_ua_hash", actualUAHash)
-	ctx.SetExtra("ua_match", ja4hUAHash == actualUAHash)
 }
 
-// extractUAHashFromJA4H parses JA4H to get UA hash component
-// Format: ja4h_version_ua_hash_accept_accept_enc_accept_lang
-// Example: ja4h_t13d1915h2_8b33c42f46a3_7d5c8e9f1a2b_...
-func extractUAHashFromJA4H(ja4h string) string {
+// extractHeaderHashFromJA4H parses JA4H to get the header names hash (B segment).
+// The B segment is SHA256 of header names in request order, NOT a UA hash.
+// Format: ja4h_[A]_[B]_[C]_[D]
+// Example: ja4h_ge20nn140000_78159df7d8ea_000000000000_000000000000
+func extractHeaderHashFromJA4H(ja4h string) string {
 	if !strings.HasPrefix(ja4h, "ja4h_") {
 		return ""
 	}
 
 	parts := strings.Split(ja4h, "_")
-	// ja4h_[version]_[ua_hash]_[accept]_[accept_enc]_[accept_lang]
-	// Index:       0      1        2        3        4           5
+	// Index: 0=ja4h, 1=A(method+flags), 2=B(header names hash), 3=C, 4=D
 	if len(parts) >= 3 {
 		return parts[2]
 	}
 	return ""
 }
 
-// hashUA creates hash of User-Agent for comparison with JA4H UA hash
-// Uses SHA256 and takes first 12 characters (same as JA4H format)
-func hashUA(ua string) string {
+// hashUAValue computes SHA256 of User-Agent string, truncated to 12 hex chars.
+// Used for UA consistency tracking across requests in the same stable session.
+func hashUAValue(ua string) string {
 	if ua == "" {
 		return ""
 	}
@@ -383,8 +382,8 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 		ctx.SetExtra("ja4h", ja4h)
 	}
 
-	// Extract UA hash from JA4H and compare with actual UA
-	h.compareUAFromJA4H(ctx, ja4h, r.Header.Get("User-Agent"))
+	// Extract header hash from JA4H and compute UA hash for fingerprinting
+	h.setFingerprintHashes(ctx, ja4h)
 
 	ua := strings.ToLower(ctx.Normalized.UA)
 	isBrowserUA := strings.Contains(ua, "mozilla") && (strings.Contains(ua, "chrome") || strings.Contains(ua, "safari") || strings.Contains(ua, "firefox"))
@@ -400,16 +399,22 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 		}
 	}
 
-	if isBrowserUA && ja4 != "" && len(ja4) >= 3 {
-		tlsVer := ja4[1:3]
-		if tlsVer == "10" || tlsVer == "11" {
-			s := h.ruleScore("ja4_old_tls_browser_ua")
-			if s > 0 {
-				ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, "ja4_old_tls_browser_ua", s)
-				score += s
-				reasons = append(reasons, "Old TLS with browser UA")
-				violations = append(violations, ProtocolViolation{Type: "ja4_old_tls_browser_ua", Score: s, Detail: "Old TLS version with browser UA"})
-			}
+	// TLS 1.0/1.1 is scored regardless of User-Agent: nginx already refuses
+	// these protocols, so a fingerprint reporting them means the TLS layer was
+	// loosened or the header was forged. The browser variant keeps its own
+	// tunable score.
+	if tlsVer := ja4TLSSegment(ja4); tlsVer == "10" || tlsVer == "11" {
+		rule := "ja4_old_tls"
+		reason := "Old TLS version"
+		if isBrowserUA {
+			rule = "ja4_old_tls_browser_ua"
+			reason = "Old TLS with browser UA"
+		}
+		if s := h.ruleScore(rule); s > 0 {
+			ctx.AddScore(pipeline.ScoreCategoryProtocolAnomaly, rule, s)
+			score += s
+			reasons = append(reasons, reason)
+			violations = append(violations, ProtocolViolation{Type: rule, Score: s, Detail: reason})
 		}
 	}
 
@@ -454,6 +459,16 @@ func (h *ProtocolAnomalyHandler) checkJA4Anomaly(ctx *pipeline.Context) (int, []
 	}
 
 	return score, reasons, violations
+}
+
+// ja4TLSSegment returns the two-character TLS version segment of a JA4
+// fingerprint, or an empty string when the fingerprint is missing or too short
+// to parse.
+func ja4TLSSegment(ja4 string) string {
+	if len(ja4) < 3 {
+		return ""
+	}
+	return ja4[1:3]
 }
 
 func isAPIPath(path string) bool {

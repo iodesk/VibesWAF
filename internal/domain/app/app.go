@@ -424,7 +424,7 @@ func DefaultAppConfig() AppConfig {
 			Threshold: 3,
 		},
 		Advanced: AdvancedConfig{
-			ConnectTimeout: 30,
+			ConnectTimeout: 5,
 			ReadTimeout:    60,
 			SendTimeout:    60,
 			ProxyBuffering: true,

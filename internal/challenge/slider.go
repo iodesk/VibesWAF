@@ -1,7 +1,9 @@
 package challenge
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"encoding/binary"
+	"io"
 )
 
 const (
@@ -22,7 +24,10 @@ func (s *SliderChallenge) TypeName() string {
 }
 
 func (s *SliderChallenge) Generate() *ChallengeData {
-	target := sliderMinTarget + rand.Intn(sliderMaxTarget-sliderMinTarget+1)
+	target, err := secureRandomTarget(rand.Reader)
+	if err != nil {
+		return nil
+	}
 
 	return &ChallengeData{
 		Type: "slider",
@@ -30,6 +35,22 @@ func (s *SliderChallenge) Generate() *ChallengeData {
 			"target": target,
 		},
 		Answer: target,
+	}
+}
+
+func secureRandomTarget(random io.Reader) (int, error) {
+	const targetRange = uint32(sliderMaxTarget - sliderMinTarget + 1)
+	const rejectionLimit = ^uint32(0) - (^uint32(0) % targetRange)
+
+	var buf [4]byte
+	for {
+		if _, err := io.ReadFull(random, buf[:]); err != nil {
+			return 0, err
+		}
+		value := binary.LittleEndian.Uint32(buf[:])
+		if value < rejectionLimit {
+			return sliderMinTarget + int(value%targetRange), nil
+		}
 	}
 }
 

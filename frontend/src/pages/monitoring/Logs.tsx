@@ -25,8 +25,9 @@ interface RequestMetadata {
   user_agent?: string
   ja4?: string
   ja4h?: string
-  ja4h_ua_hash?: string
-  actual_ua_hash?: string
+  ja4h_header_hash?: string
+  ua_hash?: string
+  prev_ua_hash?: string
   ua_match?: boolean
   http_fingerprint?: string
 }
@@ -147,7 +148,7 @@ function FingerprintSection({ request }: { request: RequestMetadata }) {
 
   if (!request) return null
 
-  const hasData = request.ja4 || request.ja4h || request.http_fingerprint || request.ja4h_ua_hash || request.actual_ua_hash
+  const hasData = request.ja4 || request.ja4h || request.http_fingerprint || request.ja4h_header_hash || request.ua_hash
   if (!hasData) return null
 
   return (
@@ -180,17 +181,23 @@ function FingerprintSection({ request }: { request: RequestMetadata }) {
               <span className="text-foreground truncate" title={request.http_fingerprint}>{request.http_fingerprint}</span>
             </div>
           )}
-          {(request.ja4h_ua_hash || request.actual_ua_hash) && (
+          {(request.ja4h_header_hash || request.ua_hash) && (
             <div className="mt-1.5 pt-1.5 border-t border-border/50">
               <div className="text-[9px] text-muted-foreground/60 mb-1">UA Hash Comparison</div>
               <div className="flex gap-2 items-center">
-                <span className="text-muted-foreground/60 shrink-0">JA4H UA:</span>
-                <span className="text-foreground truncate" title={request.ja4h_ua_hash}>{request.ja4h_ua_hash || '-'}</span>
+                <span className="text-muted-foreground/60 shrink-0">JA4H Header:</span>
+                <span className="text-foreground truncate" title={request.ja4h_header_hash}>{request.ja4h_header_hash || '-'}</span>
               </div>
               <div className="flex gap-2 items-center">
-                <span className="text-muted-foreground/60 shrink-0">Actual UA:</span>
-                <span className="text-foreground truncate" title={request.actual_ua_hash}>{request.actual_ua_hash || '-'}</span>
+                <span className="text-muted-foreground/60 shrink-0">UA Hash:</span>
+                <span className="text-foreground truncate" title={request.ua_hash}>{request.ua_hash || '-'}</span>
               </div>
+              {request.prev_ua_hash && (
+                <div className="flex gap-2 items-center">
+                  <span className="text-muted-foreground/60 shrink-0">Prev UA:</span>
+                  <span className="text-foreground truncate" title={request.prev_ua_hash}>{request.prev_ua_hash}</span>
+                </div>
+              )}
               {request.ua_match !== undefined && (
                 <div className="flex gap-2 items-center mt-1">
                   <span className="text-muted-foreground/60 shrink-0">Match:</span>

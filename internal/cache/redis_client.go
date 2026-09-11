@@ -161,6 +161,39 @@ func (r *RedisClient) Incr(ctx context.Context, key string, ttl time.Duration) (
 	return val, nil
 }
 
+var incrWithCooldownScript = redis.NewScript(`
+if redis.call("SET", KEYS[2], "1", "PX", ARGV[2], "NX") then
+  local value = redis.call("INCR", KEYS[1])
+  if value == 1 then
+    redis.call("PEXPIRE", KEYS[1], ARGV[1])
+  end
+  return 1
+end
+return 0
+`)
+
+func (r *RedisClient) IncrWithCooldown(ctx context.Context, counterKey, cooldownKey string, counterTTL, cooldown time.Duration) (bool, error) {
+	r.mu.RLock()
+	if !r.enabled {
+		r.mu.RUnlock()
+		return false, ErrCacheDisabled
+	}
+	r.mu.RUnlock()
+
+	result, err := incrWithCooldownScript.Run(
+		ctx,
+		r.client,
+		[]string{counterKey, cooldownKey},
+		counterTTL.Milliseconds(),
+		cooldown.Milliseconds(),
+	).Int64()
+	if err != nil {
+		r.checkHealth()
+		return false, err
+	}
+	return result == 1, nil
+}
+
 func (r *RedisClient) GetInt(ctx context.Context, key string) (int64, error) {
 	r.mu.RLock()
 	if !r.enabled {

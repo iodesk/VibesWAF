@@ -35,6 +35,11 @@ type CorazaEngine struct {
 	dataDir   string
 }
 
+// maxBodyInspectionBytes bounds how much request body is buffered in memory for
+// CRS inspection. Larger payloads are inspected up to this prefix only; the
+// remainder is streamed to the upstream untouched.
+const maxBodyInspectionBytes = 128 * 1024
+
 type AppConfig interface {
 	LogInfo(format string, v ...interface{})
 	LogDebug(format string, v ...interface{})
@@ -160,13 +165,14 @@ func (e *CorazaEngine) ProcessRequest(r *http.Request, clientIP string) (*WAFRes
 		return result, nil
 	}
 
-	if r.Body != nil && r.ContentLength > 0 {
-		body, readErr := io.ReadAll(r.Body)
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		if readErr == nil && len(body) > 0 {
+	if shouldInspectRequestBody(r) {
+		body := bufferBodyForInspection(r, maxBodyInspectionBytes)
+		if len(body) > 0 {
 			if _, _, err := tx.WriteRequestBody(body); err != nil {
 				return nil, fmt.Errorf("failed to write request body: %w", err)
+			}
+			if r.ContentLength > int64(len(body)) || r.ContentLength < 0 {
+				e.appConfig.LogDebug("[CORAZA] Body inspection truncated at %d bytes (contentLength=%d)", len(body), r.ContentLength)
 			}
 		}
 	}
@@ -182,6 +188,55 @@ func (e *CorazaEngine) ProcessRequest(r *http.Request, clientIP string) (*WAFRes
 	}
 
 	return &WAFResult{}, nil
+}
+
+// shouldInspectRequestBody reports whether the request carries a body worth
+// feeding to CRS. Chunked requests report ContentLength -1 and must not be
+// skipped, otherwise their payload would bypass inspection entirely.
+func shouldInspectRequestBody(r *http.Request) bool {
+	return r.Body != nil && r.ContentLength != 0
+}
+
+// bufferBodyForInspection reads at most limit bytes of the request body for CRS
+// inspection and rewinds the request so the complete payload is still forwarded
+// upstream. Memory usage is bounded by limit regardless of Content-Length.
+func bufferBodyForInspection(r *http.Request, limit int64) []byte {
+	if r.Body == nil || limit <= 0 {
+		return nil
+	}
+
+	original := r.Body
+	sampled, err := io.ReadAll(io.LimitReader(original, limit))
+	if err != nil {
+		// Keep the prefix that was read; the remainder is still streamed upstream.
+		sampled = sampled[:len(sampled):len(sampled)]
+	}
+	if len(sampled) == 0 {
+		// Nothing to inspect: leave the body untouched.
+		return nil
+	}
+
+	r.Body = &replayBody{prefix: bytes.NewReader(sampled), rest: original}
+	return sampled
+}
+
+// replayBody serves the inspected prefix followed by the unread remainder of
+// the original body, so inspection never truncates the proxied payload.
+type replayBody struct {
+	prefix *bytes.Reader
+	rest   io.ReadCloser
+	reader io.Reader
+}
+
+func (b *replayBody) Read(p []byte) (int, error) {
+	if b.reader == nil {
+		b.reader = io.MultiReader(b.prefix, b.rest)
+	}
+	return b.reader.Read(p)
+}
+
+func (b *replayBody) Close() error {
+	return b.rest.Close()
 }
 
 // evaluatorRules are CRS rules that only evaluate/summarize scores, not actual detections.

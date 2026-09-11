@@ -2,10 +2,11 @@ package cache
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -293,16 +294,21 @@ func (c *DecisionCache) GetStats() CacheStats {
 }
 
 func (c *DecisionCache) generateKey(ctx *pipeline.Context) string {
-	h := fnv.New64a()
-
-	if ctx.AppID != "" {
-		_, _ = h.Write([]byte(ctx.AppID))
+	h := sha256.New()
+	var length [4]byte
+	fields := [...]string{
+		ctx.AppID,
+		ctx.ClientIP,
+		ctx.Normalized.UA,
+		ctx.Normalized.Method,
+		ctx.Normalized.Path,
+		ctx.Normalized.Query,
 	}
-	_, _ = h.Write([]byte(ctx.ClientIP))
-	_, _ = h.Write([]byte(ctx.Normalized.UA))
-	_, _ = h.Write([]byte(ctx.Normalized.Method))
-	_, _ = h.Write([]byte(ctx.Normalized.Path))
-	_, _ = h.Write([]byte(ctx.Normalized.Query))
+	for _, field := range fields {
+		binary.BigEndian.PutUint32(length[:], uint32(len(field)))
+		_, _ = h.Write(length[:])
+		_, _ = h.Write([]byte(field))
+	}
 
-	return fmt.Sprintf("waf:decision:%016x", h.Sum64())
+	return fmt.Sprintf("waf:decision:v2:%x", h.Sum(nil))
 }

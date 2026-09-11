@@ -124,8 +124,9 @@ func (ctx *Context) populateRequestMetadata() {
 		HTTPFingerprint: ctx.HTTPFingerprint,
 		JA4:             ctx.GetExtraString("ja4"),
 		JA4H:            ctx.GetExtraString("ja4h"),
-		JA4H_UA_Hash:    ctx.GetExtraString("ja4h_ua_hash"),
-		ActualUA_Hash:   ctx.GetExtraString("actual_ua_hash"),
+		JA4H_HeaderHash: ctx.GetExtraString("ja4h_header_hash"),
+		UA_Hash:         ctx.GetExtraString("ua_hash"),
+		PrevUA_Hash:     ctx.GetExtraString("prev_ua_hash"),
 	}
 	if uaMatch, ok := ctx.GetExtra("ua_match"); ok {
 		if match, ok := uaMatch.(bool); ok {

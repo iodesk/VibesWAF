@@ -166,10 +166,29 @@ func DefaultProtocolAnomalyConfig() ProtocolAnomalyConfig {
 			"future_cookie_timestamp":      8,
 			"excessive_cookies_no_referer": 5,
 			"ja4_old_tls_browser_ua":       15,
+			"ja4_old_tls":                  15,
 			"browser_ua_http10":            15,
 			"browser_ua_ja4_empty":         4,
 			"bot_ua_browser_ja4":           15,
 			"browser_ua_simple_ja4":        15,
 		},
 	}
+}
+
+// WithDefaults fills in rules that are absent from a stored configuration, so
+// newly added detections take effect without a dashboard save. Rules that are
+// present keep their stored value, including an explicit 0 (disabled).
+func (c ProtocolAnomalyConfig) WithDefaults() ProtocolAnomalyConfig {
+	defaults := DefaultProtocolAnomalyConfig()
+	if c.Rules == nil {
+		return defaults
+	}
+	merged := make(map[string]int, len(defaults.Rules)+len(c.Rules))
+	for name, score := range defaults.Rules {
+		merged[name] = score
+	}
+	for name, score := range c.Rules {
+		merged[name] = score
+	}
+	return ProtocolAnomalyConfig{Rules: merged}
 }

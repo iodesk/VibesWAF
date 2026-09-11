@@ -158,7 +158,7 @@ func (r *SettingsRepository) GetProtocolAnomalyConfig() (model.ProtocolAnomalyCo
 		return model.ProtocolAnomalyConfig{}, err
 	}
 
-	return config, nil
+	return config.WithDefaults(), nil
 }
 
 func (r *SettingsRepository) UpdateProtocolAnomalyConfig(config model.ProtocolAnomalyConfig) error {

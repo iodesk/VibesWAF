@@ -79,10 +79,15 @@ func NewRouter(
 	uiHandler http.Handler,
 	dashboardHost string,
 ) *Router {
+	wsLimiter := ratelimit.NewWebSocketLimiter(func() (bool, int, int) {
+		basic := rateLimitService.GetConfig().Basic
+		return basic.Enabled, basic.Count, basic.Duration
+	})
+
 	return &Router{
 		ruleHandler:         handler.NewRuleHandler(ruleService, logger),
 		appHandler:          handler.NewAppHandler(appService, rateLimitService),
-		wafHandler:          handler.NewWAFHandler(wafService, appService, logger, p, maxmind, appConfig, floodProtector, trustedHistory),
+		wafHandler:          handler.NewWAFHandler(wafService, appService, logger, p, maxmind, appConfig, floodProtector, trustedHistory, wsLimiter),
 		logHandler:          handler.NewLogHandler(logger),
 		analyticsHandler:    handler.NewAnalyticsHandler(logger),
 		healthHandler:       handler.NewHealthHandler(),

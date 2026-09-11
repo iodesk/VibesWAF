@@ -20,6 +20,7 @@ const RULE_META: Record<string, { label: string; description: string; category: 
   malformed_challenge_cookie: { label: 'Malformed Challenge Cookie', description: 'Challenge cookie present but format is invalid', category: 'cookie' },
   future_cookie_timestamp: { label: 'Future Cookie Timestamp', description: 'Challenge cookie timestamp is in the future', category: 'cookie' },
   excessive_cookies_no_referer: { label: 'Excessive Cookies (No Referer)', description: 'More than 10 cookies on root path with no referer', category: 'cookie' },
+  ja4_old_tls: { label: 'Old TLS (Any Client)', description: 'TLS 1.0/1.1 detected regardless of User-Agent; nginx already refuses these protocols', category: 'ja4' },
   ja4_old_tls_browser_ua: { label: 'Old TLS + Browser UA', description: 'UA claims modern browser but TLS version is 1.0/1.1 (browsers dropped these)', category: 'ja4' },
   browser_ua_http10: { label: 'Browser UA + HTTP/1.0', description: 'UA claims modern browser but using HTTP/1.0 protocol', category: 'ja4' },
   browser_ua_ja4_empty: { label: 'Browser UA + JA4 Empty', description: 'HTTPS request with browser UA but no JA4 fingerprint (unusual)', category: 'ja4' },

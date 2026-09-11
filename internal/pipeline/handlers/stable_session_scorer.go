@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
@@ -15,12 +17,13 @@ import (
 const stableSessionKeyPrefix = "ss:"
 const stableSessionTTL = 4 * time.Hour
 
-const storedFieldCount = 3
+const storedFieldCount = 4
 
 type StableSessionEvidence struct {
 	JA4Match   bool   `json:"ja4_match"`
 	JA4HMatch  bool   `json:"ja4h_match"`
 	FPMatch    bool   `json:"fp_match"`
+	UAMatch    bool   `json:"ua_match"`
 	Reduction  int    `json:"reduction"`
 }
 
@@ -58,7 +61,8 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 	}
 
 	ja4 := ctx.GetExtraString("ja4")
-	ja4hUAHash := ctx.GetExtraString("ja4h_ua_hash")
+	ja4hHeaderHash := ctx.GetExtraString("ja4h_header_hash")
+	uaHash := computeUAHash(ctx.Normalized.UA)
 	fingerprint := ctx.HTTPFingerprint
 
 	if fingerprint == "" {
@@ -69,7 +73,7 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 	stored, err := h.redis.Get(context.Background(), key)
 
 	if err != nil || stored == "" {
-		newValue := buildStoredValue(ja4, ja4hUAHash, fingerprint)
+		newValue := buildStoredValue(ja4, ja4hHeaderHash, fingerprint, uaHash)
 		h.redis.Set(context.Background(), key, newValue, stableSessionTTL)
 		ctx.AddTrace(pipeline.StageTrace{
 			Stage:  "stable_session",
@@ -81,23 +85,32 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 
 	parts := strings.Split(stored, "|")
 
-	var storedJA4, storedJA4H, storedFP string
+	var storedJA4, storedJA4H, storedFP, storedUA string
 	if len(parts) >= storedFieldCount {
 		storedJA4 = parts[0]
 		storedJA4H = parts[1]
 		storedFP = parts[2]
+		storedUA = parts[3]
 	} else {
 		storedJA4 = ""
 		storedJA4H = ""
 		storedFP = stored
+		storedUA = ""
 	}
 
 	ja4Match := storedJA4 == ja4 && ja4 != ""
-	ja4hMatch := storedJA4H == ja4hUAHash && ja4hUAHash != ""
+	ja4hMatch := storedJA4H == ja4hHeaderHash && ja4hHeaderHash != ""
 	fpMatch := storedFP == fingerprint
+	uaMatch := storedUA != "" && uaHash != "" && storedUA == uaHash
+
+	// Set context keys for trace metadata
+	if storedUA != "" {
+		ctx.SetExtra("prev_ua_hash", storedUA)
+	}
+	ctx.SetExtra("ua_match", uaMatch)
 
 	if ja4Match && fpMatch {
-		newValue := buildStoredValue(ja4, ja4hUAHash, fingerprint)
+		newValue := buildStoredValue(ja4, ja4hHeaderHash, fingerprint, uaHash)
 		h.redis.Set(context.Background(), key, newValue, stableSessionTTL)
 		ctx.AddScore(pipeline.ScoreCategoryTrust, "stable_session", reduction)
 		h.appCfg.LogDebug("[TRUST] Stable session: ip=%s reduction=%d", ctx.ClientIP, reduction)
@@ -106,6 +119,7 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 			JA4Match:  ja4Match,
 			JA4HMatch: ja4hMatch,
 			FPMatch:   fpMatch,
+			UAMatch:   uaMatch,
 			Reduction: reduction,
 		}
 		evidenceJSON, _ := json.Marshal(evidence)
@@ -116,7 +130,7 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 			Evidence: json.RawMessage(evidenceJSON),
 		})
 	} else {
-		newValue := buildStoredValue(ja4, ja4hUAHash, fingerprint)
+		newValue := buildStoredValue(ja4, ja4hHeaderHash, fingerprint, uaHash)
 		h.redis.Set(context.Background(), key, newValue, stableSessionTTL)
 		h.appCfg.LogDebug("[TRUST] Stable session mismatch: ip=%s", ctx.ClientIP)
 
@@ -124,6 +138,7 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 			JA4Match:  ja4Match,
 			JA4HMatch: ja4hMatch,
 			FPMatch:   fpMatch,
+			UAMatch:   uaMatch,
 			Reduction: 0,
 		}
 		evidenceJSON, _ := json.Marshal(evidence)
@@ -138,6 +153,14 @@ func (h *StableSessionScorer) Handle(ctx *pipeline.Context) error {
 	return nil
 }
 
-func buildStoredValue(ja4, ja4hUAHash, fingerprint string) string {
-	return ja4 + "|" + ja4hUAHash + "|" + fingerprint
+func buildStoredValue(ja4, ja4hHeaderHash, fingerprint, uaHash string) string {
+	return ja4 + "|" + ja4hHeaderHash + "|" + fingerprint + "|" + uaHash
+}
+
+func computeUAHash(ua string) string {
+	if ua == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(strings.ToLower(ua)))
+	return hex.EncodeToString(hash[:])[:12]
 }

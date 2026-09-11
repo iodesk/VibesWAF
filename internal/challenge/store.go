@@ -59,6 +59,9 @@ func (s *Store) Stop() {
 
 func (s *Store) Create(ct ChallengeType) *ChallengeData {
 	data := ct.Generate()
+	if data == nil {
+		return nil
+	}
 	data.ID = generateID()
 	data.ExpiresAt = time.Now().Add(s.ttl)
 	data.Attempts = 0

@@ -2,13 +2,23 @@ package transport
 
 import (
 	"crypto/tls"
+	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 )
 
-// transportPool reuses http.Transport per upstream key (scheme+host+port).
+// Default timeouts when DB value is 0 / unset.
+const (
+	defaultConnectTimeout = 5
+	defaultReadTimeout    = 60
+	defaultSendTimeout    = 60
+)
+
+// transportPool reuses http.Transport per upstream key (scheme+host+port+timeouts).
 // This enables TCP keep-alive and connection pooling across requests.
+// Timeouts are part of the pool key so different timeout configs get isolated pools.
 type transportPool struct {
 	mu         sync.RWMutex
 	transports map[string]*http.Transport
@@ -21,7 +31,8 @@ var pool = &transportPool{
 // Get returns a reusable transport for the given key.
 // insecure=true disables TLS verification (AllowInsecureSSL).
 // sni sets TLS ServerName (SNI); empty = use hostname from URL.
-func (p *transportPool) Get(key string, insecure bool, sni string) *http.Transport {
+// connect/read/send in seconds — applied as per-phase Transport timeouts.
+func (p *transportPool) Get(key string, insecure bool, sni string, connectTimeout, readTimeout int) *http.Transport {
 	p.mu.RLock()
 	t, ok := p.transports[key]
 	p.mu.RUnlock()
@@ -35,12 +46,20 @@ func (p *transportPool) Get(key string, insecure bool, sni string) *http.Transpo
 		return t
 	}
 
+	dialer := &net.Dialer{
+		Timeout:   time.Duration(connectTimeout) * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+
 	t = &http.Transport{
-		MaxIdleConns:        256,
-		MaxIdleConnsPerHost: 64,
-		IdleConnTimeout:     90 * time.Second,
-		DisableKeepAlives:   false,
-		ForceAttemptHTTP2:   true,
+		DialContext:           dialer.DialContext,
+		TLSHandshakeTimeout:  time.Duration(connectTimeout) * time.Second,
+		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
+		MaxIdleConns:          256,
+		MaxIdleConnsPerHost:   64,
+		IdleConnTimeout:       90 * time.Second,
+		DisableKeepAlives:     false,
+		ForceAttemptHTTP2:     true,
 	}
 	if insecure || sni != "" {
 		t.TLSClientConfig = &tls.Config{}
@@ -57,33 +76,49 @@ func (p *transportPool) Get(key string, insecure bool, sni string) *http.Transpo
 
 // GetClient returns an *http.Client backed by a pooled transport.
 // connectTimeout, readTimeout, sendTimeout are in seconds (0 = use default 5/60/60).
+// Per-phase timeouts enforced via Transport fields (DialContext, TLSHandshakeTimeout,
+// ResponseHeaderTimeout). http.Client.Timeout serves as the overall deadline.
 // sni overrides TLS ServerName (SNI); empty = use hostname from URL.
 func GetClient(key string, insecure bool, sni string, connectTimeout, readTimeout, sendTimeout int) *http.Client {
 	if connectTimeout <= 0 {
-		connectTimeout = 5
+		connectTimeout = defaultConnectTimeout
 	}
 	if readTimeout <= 0 {
-		readTimeout = 60
+		readTimeout = defaultReadTimeout
 	}
 	if sendTimeout <= 0 {
-		sendTimeout = 60
+		sendTimeout = defaultSendTimeout
 	}
 
-	// Include sni in pool key so transports with different SNI are not shared.
+	// Include sni and timeouts in pool key — different timeout configs for the
+	// same upstream must not share a transport (per-phase timeouts are set on
+	// the Transport, not per-request).
 	poolKey := key
 	if sni != "" {
 		poolKey += "|sni=" + sni
 	}
+	poolKey += fmt.Sprintf("|%d|%d|%d", connectTimeout, readTimeout, sendTimeout)
 
-	totalTimeout := time.Duration(connectTimeout+readTimeout+sendTimeout) * time.Second
+	transport := pool.Get(poolKey, insecure, sni, connectTimeout, readTimeout)
+
+	// Overall deadline: connect + max(read, send). This covers body streaming
+	// which has no Transport-level timeout in Go's stdlib.
+	totalTimeout := time.Duration(connectTimeout+max(readTimeout, sendTimeout)) * time.Second
 
 	return &http.Client{
-		Transport: pool.Get(poolKey, insecure, sni),
+		Transport: transport,
 		Timeout:   totalTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // bufferPool reuses 32KB copy buffers for proxy body streaming, avoiding a

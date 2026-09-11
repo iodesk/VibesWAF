@@ -170,6 +170,7 @@ Detects HTTP protocol inconsistencies, cookie manipulation, and TLS fingerprint 
 | malformed_challenge_cookie | 8 | Invalid HMAC format in `ok` cookie |
 | future_cookie_timestamp | 8 | Cookie timestamp in future |
 | excessive_cookies_no_referer | 5 | >10 cookies on root without referer |
+| ja4_old_tls | 15 | TLS 1.0/1.1 with any client (nginx already refuses these) |
 | ja4_old_tls_browser_ua | 15 | TLS 1.0/1.1 with browser UA |
 | browser_ua_http10 | 10 | Browser UA with HTTP/1.0 |
 | browser_ua_ja4_empty | 3 | TLS + browser UA + no JA4 |

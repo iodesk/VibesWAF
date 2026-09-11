@@ -22,8 +22,9 @@ type RequestMetadata struct {
 	UserAgent       string `json:"user_agent,omitempty"`
 	JA4             string `json:"ja4,omitempty"`
 	JA4H            string `json:"ja4h,omitempty"`
-	JA4H_UA_Hash    string `json:"ja4h_ua_hash,omitempty"`
-	ActualUA_Hash   string `json:"actual_ua_hash,omitempty"`
+	JA4H_HeaderHash string `json:"ja4h_header_hash,omitempty"`
+	UA_Hash         string `json:"ua_hash,omitempty"`
+	PrevUA_Hash     string `json:"prev_ua_hash,omitempty"`
 	UA_Match        bool   `json:"ua_match,omitempty"`
 	HTTPFingerprint string `json:"http_fingerprint,omitempty"`
 }

@@ -35,12 +35,12 @@ Each handler checks `ctx.HardDecision` at entry — if already set by a previous
 
 **Cookie format:**
 ```
-<hex_signature_32chars>.<unix_timestamp>.<trust_level>
+<hex_signature_64chars>.<unix_timestamp>.<trust_level>
 ```
 
 **Config (dashboard: Bot Detector):**
 - `challenge_duration`: cookie TTL in seconds (default: 36000 = 10h)
-- Backward compatible: old cookies without trust_level treated as level 0
+- Only the current 3-part format is accepted. Legacy `signature.timestamp` cookies and truncated (32-char) signatures are rejected, so a downgrade cannot bypass the trust level. Cookies with a timestamp more than 60s in the future are rejected as well; clients re-solve once after an upgrade.
 
 ---
 

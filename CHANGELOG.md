@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.0.9] - 2026-09-05
+
+### Security
+
+- WAF body inspection is now memory-bounded: at most 128KB (`maxBodyInspectionBytes`) is buffered for CRS, and the inspected prefix is replayed ahead of the unread remainder so the full payload is still forwarded. Previously the entire body was read into memory (uploads were a DoS vector). (`internal/waf/coraza_engine.go`)
+- Chunked requests (unknown length) are now inspected; previously `ContentLength > 0` skipped them, letting a chunked payload bypass CRS entirely. (`internal/waf/coraza_engine.go`)
+- Challenge cookie validation accepts only the current 3-part format with a full 64-character HMAC-SHA256 signature; legacy two-part cookies and 32-character truncated signatures are rejected, closing a downgrade path to trust level 0. (`internal/pipeline/handlers/challenge_validator.go`)
+- Challenge cookies with a timestamp beyond 60s in the future are rejected. (`internal/pipeline/handlers/challenge_validator.go`)
+- TLS 1.0/1.1 is now scored for any client through the new `ja4_old_tls` rule, not only when the User-Agent claims a browser, giving a second layer if the TLS policy is loosened. (`internal/pipeline/handlers/protocol_anomaly_handler.go`, `internal/model/settings.go`)
+- Stored protocol anomaly config is merged with current defaults on read, so newly added rules take effect without a dashboard save (an explicit 0 still disables a rule). (`internal/model/settings.go`, `internal/repository/settings_repository.go`)
+- Baseline security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, plus `Strict-Transport-Security` on TLS) are now applied to every proxied response, overriding weaker upstream values; per-app `add_headers` still win. CSP/COOP/Permissions-Policy are intentionally left to per-app config because safe values are application specific. (`internal/api/v1/handler/security_headers.go`, `internal/api/v1/handler/waf_handler.go`)
+- Slider challenge target now drawn from `crypto/rand` with rejection sampling instead of unseeded `math/rand`, removing the predictable-target bypass. (`internal/challenge/slider.go`)
+- Challenge generation failure (entropy unavailable) now aborts with HTTP 503 instead of serving a predictable challenge. (`internal/challenge/store.go`, `internal/pipeline/handlers/challenge_handler.go`)
+- Trusted history counter now enforces a per-IP cooldown via atomic Redis Lua (`SET NX PX` + `INCR`), so a request burst can no longer inflate the clean-request counter toward the trust threshold. (`internal/cache/redis_client.go`, `internal/pipeline/handlers/trusted_history_scorer.go`)
+- WebSocket upgrades are now rate limited per app+IP before tunneling, reusing the dashboard basic rate-limit budget; disabled config skips limiting, invalid config fails closed with HTTP 429. (`internal/ratelimit/websocket.go`, `internal/api/v1/handler/waf_handler.go`, `internal/api/v1/router.go`)
+- Decision cache key switched from FNV-64a over concatenated fields to length-prefixed SHA-256 under a `waf:decision:v2:` prefix, eliminating collision and field-boundary ambiguity that could replay another client's cached decision. (`internal/cache/decision_cache.go`)
+- Fix JA4H UA hash mismatch bug: `extractUAHashFromJA4H` incorrectly compared header names hash (JA4H B segment) against UA value hash, causing always-mismatch display. Renamed to `extractHeaderHashFromJA4H` and implemented real UA consistency tracking. (`internal/pipeline/handlers/protocol_anomaly_handler.go`)
+- Fix upstream timeout architecture: replace summed `http.Client.Timeout` (connect + read + send = 125s default) with per-phase Transport timeouts (`DialContext`, `TLSHandshakeTimeout`, `ResponseHeaderTimeout`). Connect, read, and send timeouts are now independently enforced. (`internal/transport/proxy_transport.go`)
+
+### Changed
+
+- Protocol Anomaly dashboard lists the new "Old TLS (Any Client)" rule so it can be tuned or disabled. (`frontend/src/pages/security/AnomalyBehavior.tsx`)
+- Stable session scorer now stores and compares UA hash as 4th field (`ja4|headerHash|fingerprint|uaHash`); UA mismatch detected when same IP changes User-Agent mid-session. (`internal/pipeline/handlers/stable_session_scorer.go`)
+- Trace `RequestMetadata` fields renamed: `ja4h_ua_hash` → `ja4h_header_hash`, `actual_ua_hash` → `ua_hash`, added `prev_ua_hash`. (`internal/pipeline/trace.go`, `internal/pipeline/context.go`)
+- Frontend fingerprint section labels corrected: "JA4H UA" → "JA4H Header", "Actual UA" → "UA Hash", added "Prev UA" display for UA change detection. (`frontend/src/pages/monitoring/Logs.tsx`)
+- Default `ConnectTimeout` changed from 30s to 5s in `DefaultAppConfig()` to match `GetClient` fallback. (`internal/domain/app/app.go`)
+- Transport pool key now includes timeout values — different timeout configs for the same upstream get isolated connection pools. (`internal/transport/proxy_transport.go`)
+- `http.Client.Timeout` now calculated as `connectTimeout + max(readTimeout, sendTimeout)` instead of `connectTimeout + readTimeout + sendTimeout`. (`internal/transport/proxy_transport.go`)
+
+### Performance
+
+- Add `net.Dialer.KeepAlive: 30s` to transport for better connection reuse. (`internal/transport/proxy_transport.go`)
+
+### Internal
+
+- `const Version = "1.0.9"` in `internal/config/app_config.go`.
+- Added regression tests: body inspection bound and full-payload replay against real Coraza/CRS, chunked-body inspection, challenge cookie downgrade/expiry/skew rejection, UA-independent old-TLS scoring, security header baseline with per-app override through the real proxy path, secure slider target, versioned decision cache key, WebSocket upgrade limiter, and trusted history cooldown. (`internal/waf/coraza_engine_test.go`, `internal/waf/coraza_body_test.go`, `internal/pipeline/handlers/challenge_validator_test.go`, `internal/pipeline/handlers/protocol_anomaly_test.go`, `internal/model/settings_test.go`, `internal/api/v1/handler/security_headers_test.go`, `internal/api/v1/handler/proxy_security_headers_test.go`, `internal/challenge/slider_test.go`, `internal/cache/decision_cache_test.go`, `internal/ratelimit/websocket_test.go`, `internal/pipeline/handlers/trusted_history_scorer_test.go`)
+- Timeout defaults extracted to package constants (`defaultConnectTimeout`, `defaultReadTimeout`, `defaultSendTimeout`). (`internal/transport/proxy_transport.go`)
+
 ## [1.0.8] - 2026-09-02
 
 ### Changed
